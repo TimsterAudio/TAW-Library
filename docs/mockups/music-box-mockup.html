@@ -1,0 +1,776 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+<title>Music Box Mock-up</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Michroma&family=Share+Tech+Mono&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one hardware panel. A fixed top strip and stripe, then a row of
+   framed sections whose lists stretch with the window. Below 1280px the
+   whole panel scales down instead of re-wrapping (Drone Box / EQ Box rule). */
+:root {
+  /* Black panel (default) */
+  --page: #0a0a0a;
+  --panel: #171717;
+  --legend: #ece8dd;
+  --legend-dim: #8e8a81;
+  --frame: rgba(236, 232, 221, .30);
+  --tick: #7c786f;
+  --well: #101010;
+  --row-hi: rgba(236, 232, 221, .06);
+  --row-sel: rgba(236, 123, 36, .16);
+  color-scheme: dark;
+
+  /* Same on both panels, as on real hardware */
+  --led: #ff3a24;
+  --led-off: #3a1611;
+  --lcd-bg: #110504;
+  --lcd-ink: #ff5b36;
+  --lcd-dim: #6a2414;
+  --focus: #ec7b24;
+  --on-green: #009664;
+  --amber: #e09a2a;
+  --s-red: #d8432a; --s-orange: #ec7b24; --s-yellow: #efc23b; --s-cream: #e7e0c9;
+
+  --f-legend: 'Barlow Semi Condensed', 'Arial Narrow', sans-serif;
+  --f-logo: 'Michroma', 'Eurostile', 'Arial Black', sans-serif;
+  --f-mono: 'Share Tech Mono', ui-monospace, 'Consolas', monospace;
+  --f-maker: 'Space Grotesk', 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --page: #8f8c86; --panel: #d5d2ca; --legend: #1b1a18; --legend-dim: #5a5750;
+    --frame: rgba(27, 26, 24, .42); --tick: #4f4c46; --well: #c8c5bc;
+    --row-hi: rgba(27, 26, 24, .07); --row-sel: rgba(236, 123, 36, .22);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --page: #8f8c86; --panel: #d5d2ca; --legend: #1b1a18; --legend-dim: #5a5750;
+  --frame: rgba(27, 26, 24, .42); --tick: #4f4c46; --well: #c8c5bc;
+  --row-hi: rgba(27, 26, 24, .07); --row-sel: rgba(236, 123, 36, .22);
+  color-scheme: light;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--page); color: var(--legend);
+  font-family: var(--f-legend); font-weight: 600;
+  padding-inline: 16px; padding-block: 16px;
+  overflow-x: hidden;
+}
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.rack { min-width: 1560px; max-width: 1840px; margin-inline: auto; transform-origin: top left; }
+.panel {
+  background: var(--panel); border-radius: 4px; padding: 14px 18px 10px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 18px 40px rgba(0,0,0,.35);
+}
+:root[data-theme="light"] .panel { background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px); }
+
+/* ---------- top strip ---------- */
+.top { display: flex; align-items: flex-start; gap: 12px; height: 104px; }
+.brand { width: 262px; flex: none; }
+.maker { display: inline-block; font-family: var(--f-maker); font-weight: 500; font-size: 13px; color: var(--legend-dim);
+  border: 1px solid var(--frame); border-radius: 3px; padding: 3px 9px; }
+.maker b { color: var(--legend); font-weight: 700; }
+.logo { font-family: var(--f-logo); font-size: 30px; letter-spacing: .04em; margin: 8px 0 2px;
+  transform: skewX(-12deg); transform-origin: left; color: var(--legend); white-space: nowrap; }
+.model { font-size: 10px; letter-spacing: .2em; color: var(--legend-dim); text-transform: uppercase; white-space: nowrap; }
+
+.lcd { background: var(--lcd-bg); border-radius: 3px; box-shadow: inset 0 0 0 1px #000, inset 0 2px 8px rgba(0,0,0,.8);
+  font-family: var(--f-mono); color: var(--lcd-ink); text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(255, 70, 30, .55); font-variant-numeric: tabular-nums; }
+.main-lcd { width: 300px; flex: none; padding: 12px 14px; font-size: 15px; line-height: 1.45; letter-spacing: .04em; margin-top: 8px; }
+.main-lcd .l { display: flex; justify-content: space-between; gap: 12px; white-space: nowrap; overflow: hidden; }
+.main-lcd .l span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.main-lcd .l span:last-child { flex: none; }
+
+.group { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.group > .gtitle { font-size: 10.5px; letter-spacing: .18em; color: var(--legend-dim); text-transform: uppercase; height: 14px; }
+.keys { display: flex; gap: 6px; align-items: flex-end; }
+.kw { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.kw .lab { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+.ledspot { width: 6px; height: 6px; border-radius: 50%; background: var(--led-off); }
+.ledspot.on { background: var(--led); box-shadow: 0 0 6px 1px rgba(255,58,36,.8); }
+.ledspot.none { visibility: hidden; }
+.key { width: 54px; height: 26px; border: 0; border-radius: 2px; cursor: pointer; padding: 0;
+  background: linear-gradient(var(--k-hi), var(--k-face) 30%, var(--k-face) 70%, var(--k-lo));
+  box-shadow: 0 2px 0 var(--k-sh), 0 3px 4px rgba(0,0,0,.4); }
+.key:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--k-sh); }
+.key.wide { width: 84px; height: 30px; }
+.k-red { --k-face: #d8432a; --k-hi: #ea6a50; --k-lo: #b5361f; --k-sh: #5e1a0f; }
+.k-orange { --k-face: #ec7b24; --k-hi: #f8984d; --k-lo: #c9631a; --k-sh: #6b340b; }
+.k-yellow { --k-face: #efc23b; --k-hi: #fad968; --k-lo: #cda129; --k-sh: #6d530f; }
+.k-cream { --k-face: #e4dcc4; --k-hi: #f5f0e0; --k-lo: #c6bea3; --k-sh: #5f5a48; }
+.k-grey { --k-face: #48463f; --k-hi: #63605a; --k-lo: #34322d; --k-sh: #0e0e0d; }
+.key[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+
+.meters { display: grid; grid-template-columns: auto auto; gap: 7px 8px; align-items: center; margin-top: 4px; }
+.meters .ml { font-size: 10.5px; letter-spacing: .14em; text-align: right; }
+.ladder { display: flex; gap: 2px; background: #0b0b0b; padding: 3px; border-radius: 2px; box-shadow: inset 0 0 0 1px #000; }
+.ladder i { width: 5px; height: 11px; background: #16301f; border-radius: 1px; }
+.ladder i.on { background: #2fd27a; box-shadow: 0 0 4px rgba(47,210,122,.6); }
+.ladder i.amber { background: #3a2a0e; } .ladder i.amber.on { background: #f0b232; box-shadow: 0 0 4px rgba(240,178,50,.6); }
+.meters .mv { font-family: var(--f-mono); font-size: 13px; color: var(--lcd-ink); text-shadow: 0 0 6px rgba(255,70,30,.5); }
+
+.spacer { flex: 1; }
+
+/* ---------- stripe ---------- */
+.stripe { display: grid; grid-template-columns: repeat(4, 1fr); height: 5px; margin: 6px -18px 16px; }
+.stripe i:nth-child(1) { background: var(--s-red); } .stripe i:nth-child(2) { background: var(--s-orange); }
+.stripe i:nth-child(3) { background: var(--s-yellow); } .stripe i:nth-child(4) { background: var(--s-cream); }
+
+/* ---------- sections ---------- */
+.row { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 14px; height: 640px; }
+.sect { position: relative; border: 1px solid var(--frame); border-radius: 3px; padding: 20px 12px 12px; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.sect > h2 { position: absolute; top: -8px; left: 10px; margin: 0; padding: 0 6px; background: var(--panel);
+  font-size: 12px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; color: var(--legend); white-space: nowrap; }
+.sect > .tabs { position: absolute; top: -9px; right: 10px; display: flex; gap: 6px; background: var(--panel); padding: 0 6px; }
+.tab { display: flex; align-items: center; gap: 6px; border: 1px solid var(--frame); border-radius: 2px; background: var(--panel);
+  font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; padding: 1px 8px; cursor: pointer; color: var(--legend-dim); }
+.tab.on { color: var(--legend); border-color: var(--legend-dim); }
+.tab .ledspot { width: 5px; height: 5px; }
+.side { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.hint { font-size: 12px; color: var(--legend-dim); font-weight: 500; line-height: 1.4; }
+
+.well { background: var(--well); border-radius: 2px; box-shadow: inset 0 1px 3px rgba(0,0,0,.5); overflow: auto; min-height: 0; }
+.well::-webkit-scrollbar { width: 8px; height: 8px; } .well::-webkit-scrollbar-thumb { background: var(--tick); border-radius: 4px; }
+
+/* drives */
+.drive { display: grid; grid-template-columns: 10px 1fr auto; gap: 2px 8px; align-items: center; padding: 7px 8px; border-bottom: 1px solid var(--row-hi); }
+.drive:last-child { border-bottom: 0; }
+.drive .nm { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drive .ct { font-family: var(--f-mono); font-size: 12.5px; color: var(--lcd-ink); }
+.drive .sub { grid-column: 2 / 4; font-size: 11.5px; color: var(--legend-dim); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.ok { background: #2fd27a; box-shadow: 0 0 5px rgba(47,210,122,.7); }
+.dot.off { background: var(--tick); }
+.dot.warn { background: #f0b232; box-shadow: 0 0 5px rgba(240,178,50,.6); }
+.dot.bad { background: var(--led); box-shadow: 0 0 5px rgba(255,58,36,.7); }
+.drive.excl { opacity: .7; } .drive.excl .nm { text-decoration: line-through; text-decoration-color: var(--tick); }
+
+.fmt { display: grid; grid-template-columns: 44px 1fr 62px; gap: 6px 8px; align-items: center; font-size: 11.5px; letter-spacing: .12em; }
+.bar { height: 8px; background: var(--well); border-radius: 1px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
+.bar i { display: block; height: 100%; background: var(--legend-dim); }
+.fmt .n { font-family: var(--f-mono); font-size: 12px; color: var(--lcd-ink); text-align: right; letter-spacing: 0; }
+
+/* views */
+.view { display: none; height: 100%; min-height: 0; }
+.view.on { display: grid; }
+#v-library { grid-template-columns: 230px minmax(0, 1fr) 380px; gap: 14px; }
+#v-missing { grid-template-columns: 250px minmax(0, 1fr); gap: 14px; }
+#v-dupes { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 14px; }
+#v-organise { grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 14px; }
+
+.find { padding: 7px 10px; font-size: 13px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+.find input { all: unset; width: 100%; font-family: var(--f-mono); color: var(--lcd-ink); text-transform: uppercase; }
+.find input::placeholder { color: var(--lcd-dim); }
+
+.list { flex: 1; }
+.li { display: grid; grid-template-columns: 1fr auto 10px; gap: 8px; align-items: center; padding: 6px 9px; cursor: pointer; font-size: 13.5px; border-left: 2px solid transparent; }
+.li:hover { background: var(--row-hi); }
+.li.sel { background: var(--row-sel); border-left-color: var(--focus); }
+.li .c { font-family: var(--f-mono); font-size: 12px; color: var(--legend-dim); }
+.li .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { display: inline-block; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; padding: 1px 5px; border-radius: 2px;
+  border: 1px solid currentColor; line-height: 1.35; white-space: nowrap; font-weight: 700; }
+.chip.lossless { color: var(--on-green); } .chip.lossy { color: var(--legend-dim); }
+.chip.miss { color: var(--led); } .chip.warn { color: var(--amber); } .chip.ok { color: var(--on-green); }
+.chip.solid { background: var(--amber); color: #1b1a18; border-color: var(--amber); }
+
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th { position: sticky; top: 0; background: var(--well); text-align: left; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--legend-dim); padding: 7px 9px; font-weight: 700; border-bottom: 1px solid var(--frame); z-index: 1; white-space: nowrap; }
+td { padding: 6px 9px; font-size: 13.5px; border-bottom: 1px solid var(--row-hi); vertical-align: middle; }
+tr.clk { cursor: pointer; } tr.clk:hover td { background: var(--row-hi); } tr.sel td { background: var(--row-sel); }
+td.m, .m { font-family: var(--f-mono); font-size: 12.5px; }
+td.r, th.r { text-align: right; }
+td .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.thumb { width: 38px; height: 38px; border-radius: 2px; display: grid; place-items: center; font-family: var(--f-mono); font-size: 9px; }
+.thumb.none { background: var(--lcd-bg); color: var(--lcd-dim); box-shadow: inset 0 0 0 1px var(--lcd-dim); }
+
+/* album detail */
+.detail { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.dhead { display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+.art { width: 150px; height: 150px; border-radius: 2px; position: relative; overflow: hidden; display: flex; align-items: flex-end; padding: 8px;
+  font-family: var(--f-mono); font-size: 10px; }
+.art .px { background: rgba(0,0,0,.55); color: #ece8dd; padding: 1px 4px; border-radius: 2px; }
+.art.none { background: var(--lcd-bg); box-shadow: inset 0 0 0 1px var(--lcd-dim); color: var(--lcd-ink); align-items: center; justify-content: center; text-align: center; font-size: 13px; line-height: 1.5; text-shadow: 0 0 6px rgba(255,70,30,.55); }
+.fields { display: grid; grid-template-columns: 10px 86px 1fr; gap: 5px 7px; align-items: center; font-size: 13px; align-content: start; }
+.fields .k { font-size: 10.5px; letter-spacing: .14em; color: var(--legend-dim); text-transform: uppercase; }
+.fields .v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fields .v.missing { font-family: var(--f-mono); color: var(--led); font-size: 12px; }
+.dkeys { display: flex; gap: 10px; }
+.dkeys .kw .lab { font-size: 10px; }
+.loc { font-size: 11.5px; color: var(--legend-dim); font-weight: 500; word-break: break-all; }
+
+/* missing view */
+.tiles { display: flex; flex-direction: column; gap: 8px; }
+.tile { display: grid; grid-template-columns: 1fr auto; align-items: center; padding: 8px 10px; cursor: pointer; border: 1px solid transparent; text-align: left; width: 100%; }
+.tile .t { font-size: 12px; letter-spacing: .1em; color: var(--lcd-ink); opacity: .85; }
+.tile .n { font-size: 20px; }
+.tile .u { grid-column: 1 / 3; font-size: 11px; color: var(--lcd-dim); letter-spacing: .06em; text-shadow: none; }
+.tile.sel { border-color: var(--focus); }
+
+/* dupes */
+.dsum { display: flex; gap: 12px; align-items: stretch; }
+.dsum .lcd { padding: 8px 14px; min-width: 180px; }
+.dsum .lcd .n { font-size: 22px; } .dsum .lcd .t { font-size: 11px; letter-spacing: .1em; }
+.dsum .hint { max-width: 520px; align-self: center; }
+.dgroup { border: 1px solid var(--frame); border-radius: 3px; margin: 10px; }
+.dgroup header { display: flex; align-items: baseline; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--row-hi); }
+.dgroup header b { font-size: 15px; } .dgroup header .hint { margin-left: auto; }
+.dgroup td { font-size: 13px; }
+.keep { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; letter-spacing: .14em; }
+.lens { width: 34px; height: 16px; border-radius: 2px; background: #1a1d1b; box-shadow: inset 0 0 0 1px #000; cursor: pointer; border: 0; }
+.lens.on { background: var(--on-green); box-shadow: 0 0 8px rgba(0,150,100,.7), inset 0 0 0 1px rgba(0,0,0,.4); }
+
+/* organise */
+.tmpl { grid-column: 1 / 4; display: flex; gap: 18px; align-items: flex-end; }
+.tmpl .lcd { flex: 1; padding: 10px 14px; font-size: 15px; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tmpl .lcd .dim { color: var(--lcd-dim); text-shadow: none; }
+.tree { font-size: 13px; padding: 8px 4px; line-height: 1.75; font-weight: 500; }
+.tree div { white-space: nowrap; }
+.tree .d { font-weight: 700; } .tree .f { color: var(--legend); }
+.tree .g { color: var(--legend-dim); }
+.tree .x { color: var(--led); } .tree .w { color: var(--amber); } .tree .new { color: var(--on-green); }
+.tree .ind { display: inline-block; width: 16px; border-left: 1px solid var(--frame); height: 1.2em; vertical-align: -3px; margin-left: 6px; }
+.plan { display: flex; flex-direction: column; gap: 8px; }
+.plan .lcd { display: grid; grid-template-columns: 1fr auto; padding: 7px 12px; font-size: 13px; }
+.plan .lcd .n { font-size: 16px; }
+.plan .lcd.need { box-shadow: inset 0 0 0 1px var(--focus); }
+
+.foot { display: flex; justify-content: space-between; gap: 20px; margin-top: 10px; font-size: 12px; font-weight: 500; color: var(--legend-dim); }
+.foot .warn { color: var(--s-orange); font-weight: 600; }
+.mocknote { font-family: var(--f-maker); font-size: 12px; color: var(--legend-dim); margin: 0 auto 10px; max-width: 1840px; min-width: 1560px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="rack" id="rack">
+<p class="mocknote">Mock-up for review · sample library, nothing here touches real files · the keys and lists respond to clicks</p>
+<div class="panel">
+
+  <div class="top">
+    <div class="brand">
+      <span class="maker">Timster's Audio Works - <b>Music Box</b></span>
+      <div class="logo">MUSIC BOX</div>
+      <div class="model">MB-1 · Music Library Manager · v0.1 mock-up</div>
+    </div>
+
+    <div class="lcd main-lcd" aria-live="polite">
+      <div class="l"><span id="lcd1a">59,706 tracks</span><span id="lcd1b">Read only</span></div>
+      <div class="l"><span id="lcd2a">4 drives · 1 offline</span><span id="lcd2b">Lookups off</span></div>
+    </div>
+
+    <div class="group">
+      <div class="gtitle">Library</div>
+      <div class="keys">
+        <div class="kw"><span class="ledspot none"></span><button class="key k-cream" data-say="Scanning 4 drives|Changed only"></button><span class="lab">Scan</span></div>
+        <div class="kw"><span class="ledspot none"></span><button class="key k-cream" data-say="Add drive or folder|Choose"></button><span class="lab">Add</span></div>
+        <div class="kw"><span class="ledspot none"></span><button class="key k-grey" data-say="Exclude rules|4 set"></button><span class="lab">Exclude</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="gtitle">&nbsp;</div>
+      <div class="meters">
+        <span class="ml">TAGS</span><span class="ladder" id="m-tags"></span>
+        <span class="ml">ART</span><span class="ladder" id="m-art"></span>
+      </div>
+      <div class="model" style="letter-spacing:.14em">Complete <span class="m" style="color:var(--lcd-ink)">87% · 71%</span></div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="group">
+      <div class="gtitle">View</div>
+      <div class="keys" id="viewkeys">
+        <div class="kw"><span class="ledspot on"></span><button class="key k-grey" data-view="library" aria-pressed="true"></button><span class="lab">Library</span></div>
+        <div class="kw"><span class="ledspot"></span><button class="key k-grey" data-view="missing" aria-pressed="false"></button><span class="lab">Missing</span></div>
+        <div class="kw"><span class="ledspot"></span><button class="key k-grey" data-view="dupes" aria-pressed="false"></button><span class="lab">Dupes</span></div>
+        <div class="kw"><span class="ledspot"></span><button class="key k-grey" data-view="organise" aria-pressed="false"></button><span class="lab">Organise</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="gtitle">Panel</div>
+      <div class="keys" id="panelkeys">
+        <div class="kw"><span class="ledspot"></span><button class="key k-grey" data-panel="dark"></button><span class="lab">Black</span></div>
+        <div class="kw"><span class="ledspot"></span><button class="key k-grey" data-panel="light"></button><span class="lab">Silver</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="gtitle">Online</div>
+      <div class="keys">
+        <div class="kw"><span class="ledspot" id="onlineLed"></span><button class="key k-yellow" id="onlineKey" aria-pressed="false"></button><span class="lab">Lookups</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="gtitle">&nbsp;</div>
+      <div class="keys">
+        <div class="kw"><span class="ledspot" id="applyLed"></span><button class="key k-red wide" id="applyKey"></button><span class="lab">Apply plan</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stripe"><i></i><i></i><i></i><i></i></div>
+
+  <div class="row">
+    <div class="side">
+      <section class="sect" style="flex:none">
+        <h2>Drives</h2>
+        <div class="well" id="drives"></div>
+      </section>
+      <section class="sect" style="flex:none">
+        <h2>Formats</h2>
+        <div class="fmt" id="formats"></div>
+      </section>
+      <section class="sect" style="flex:1">
+        <h2>Excluded</h2>
+        <div class="hint" id="excluded"></div>
+      </section>
+    </div>
+
+    <div style="min-width:0;min-height:0">
+      <!-- LIBRARY -->
+      <div class="view on" id="v-library">
+        <section class="sect">
+          <h2>Artists</h2>
+          <div class="lcd find"><input id="findArtist" placeholder="Find artist" aria-label="Find artist" autocomplete="off"></div>
+          <div class="well list" id="artists"></div>
+        </section>
+        <section class="sect">
+          <h2 id="albumsTitle">Albums</h2>
+          <div class="tabs"><span class="tab on"><span class="ledspot on"></span>By year</span><span class="tab"><span class="ledspot"></span>A–Z</span></div>
+          <div class="well list"><table><thead><tr><th style="width:52px"></th><th class="r" style="width:56px">Year</th><th>Album</th><th class="r">Tracks</th><th class="r">Time</th><th>Format</th><th>Needs</th></tr></thead><tbody id="albums"></tbody></table></div>
+        </section>
+        <section class="sect">
+          <h2>Album</h2>
+          <div class="detail" id="detail"></div>
+        </section>
+      </div>
+
+      <!-- MISSING -->
+      <div class="view" id="v-missing">
+        <section class="sect">
+          <h2>What's missing</h2>
+          <div class="tiles" id="tiles"></div>
+        </section>
+        <section class="sect">
+          <h2 id="missTitle">Albums with no artwork</h2>
+          <div class="tabs"><span class="tab on"><span class="ledspot on"></span>Albums</span><span class="tab"><span class="ledspot"></span>Tracks</span></div>
+          <div class="well list"><table><thead><tr><th>Artist</th><th>Album</th><th class="r">Year</th><th>Missing</th><th>Where it is</th><th id="matchHead">Online match</th></tr></thead><tbody id="missRows"></tbody></table></div>
+        </section>
+      </div>
+
+      <!-- DUPES -->
+      <div class="view" id="v-dupes">
+        <div class="dsum">
+          <div class="lcd"><div class="n">214</div><div class="t">Identical files</div></div>
+          <div class="lcd"><div class="n">96</div><div class="t">Same audio, other tags</div></div>
+          <div class="lcd"><div class="n">388</div><div class="t">Same recording, other format</div></div>
+          <p class="hint">Music Box suggests a copy to keep (lossless first, then higher bitrate, then the more complete tags). Copies you don't keep move to a Review folder. Nothing is deleted.</p>
+        </div>
+        <section class="sect">
+          <h2>Review</h2>
+          <div class="tabs"><span class="tab on"><span class="ledspot on"></span>Albums</span><span class="tab"><span class="ledspot"></span>Tracks</span><span class="tab"><span class="ledspot"></span>Decided</span></div>
+          <div class="well" style="flex:1" id="dupes"></div>
+        </section>
+      </div>
+
+      <!-- ORGANISE -->
+      <div class="view" id="v-organise">
+        <div class="tmpl">
+          <div class="group" style="align-items:flex-start">
+            <div class="gtitle">Mode</div>
+            <div class="keys" id="modekeys">
+              <div class="kw"><span class="ledspot on"></span><button class="key k-orange" data-mode="copy"></button><span class="lab">Copy</span></div>
+              <div class="kw"><span class="ledspot"></span><button class="key k-orange" data-mode="move"></button><span class="lab">Move</span></div>
+            </div>
+          </div>
+          <div class="group" style="align-items:stretch;flex:1;min-width:0">
+            <div class="gtitle" style="text-align:left">Folder and file names</div>
+            <div class="lcd"><span class="dim">M:\Music\</span>{Album Artist}<span class="dim">\</span>{Year} - {Album}<span class="dim">\</span>{Disc}{Track} {Title}<span class="dim">.{ext}</span></div>
+          </div>
+          <div class="group">
+            <div class="gtitle">&nbsp;</div>
+            <div class="keys">
+              <div class="kw"><span class="ledspot none"></span><button class="key k-cream" data-say="Music folder|M:\Music"></button><span class="lab">Target</span></div>
+              <div class="kw"><span class="ledspot none"></span><button class="key k-cream" data-say="Name pattern|Edit"></button><span class="lab">Pattern</span></div>
+            </div>
+          </div>
+        </div>
+        <section class="sect">
+          <h2>Now</h2>
+          <div class="well tree" style="flex:1" id="treeNow"></div>
+        </section>
+        <section class="sect">
+          <h2>Plan</h2>
+          <div class="plan" id="plan"></div>
+        </section>
+        <section class="sect">
+          <h2>New Music folder</h2>
+          <div class="well tree" style="flex:1" id="treeNew"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Click a key to switch views · click an artist or album to see it · Lookups lights up the online matches · Silver/Black swaps the panel</span>
+    <span class="warn" id="footWarn">Nothing changes on disk until you review the plan and press Apply.</span>
+  </div>
+</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const say = (a, b) => { $('#lcd2a').textContent = a; if (b !== undefined) $('#lcd2b').textContent = b; };
+
+/* ---------- sample data ---------- */
+const drives = [
+  { id: 'C:', name: 'C:  Windows (SSD)', vol: 'VOL 6A3F-21C0', n: 3214, st: 'ok', sub: 'Users\\me\\Music · scanned today 09:12' },
+  { id: 'D:', name: 'D:  Data (4 TB)', vol: 'VOL 1E77-90AB', n: 31870, st: 'ok', sub: 'Music, Downloads · scanned today 09:14' },
+  { id: 'E:', name: 'E:  OLD IPOD', vol: 'VOL 0C12-4F3E', n: 6402, st: 'off', sub: 'Offline · last seen 3 Oct · entries kept' },
+  { id: 'NAS', name: '\\\\NAS\\music', vol: 'SMB · nas.local', n: 18220, st: 'ok', sub: 'Network · scanned yesterday 22:40' },
+];
+const formats = [['FLAC', 23410], ['MP3', 25106], ['M4A', 7385], ['WAV', 3591], ['AIFF', 214]];
+const excluded = [
+  ['D:\\Samples', '12,940 WAV one-shots and loops (sample packs)'],
+  ['D:\\Projects', '1,206 files inside DAW project folders'],
+  ['C:\\Windows\\Media', '62 system sounds'],
+  ['D:\\Podcasts', '388 files tagged as podcasts'],
+];
+
+// Album art stand-ins: a colour pair per album, or null when there is no art.
+const A = (year, title, tracks, time, fmt, needs, art, px, loc, extra) => ({ year, title, tracks, time, fmt, needs, art, px, loc, ...extra });
+const albums = {
+  'Radiohead': [
+    A(1993, 'Pablo Honey', 12, '42:11', ['MP3'], ['Art'], null, '', 'E:\\iPod_Control\\Music\\F07\\'),
+    A(1995, 'The Bends', 12, '48:37', ['MP3'], ['Year'], ['#5c6f7a', '#c9b48a'], '600 × 600', 'D:\\Music\\Radiohead - The Bends\\'),
+    A(1997, 'OK Computer', 12, '53:21', ['FLAC', 'MP3'], ['Album artist'], ['#dfe3e6', '#6e8fa8'], '1400 × 1400', 'D:\\Downloads\\radiohead-ok_computer-1997-FLAC\\', { dupe: true }),
+    A(2000, 'Kid A', 10, '49:58', ['FLAC'], [], ['#7e2f2a', '#e9e4dd'], '1200 × 1200', '\\\\NAS\\music\\Radiohead\\Kid A\\'),
+    A(2001, 'Amnesiac', 11, '43:57', ['M4A'], ['Art small'], ['#b33a2c', '#1d1d1d'], '300 × 300', 'C:\\Users\\me\\Music\\iTunes\\Radiohead\\Amnesiac\\'),
+    A(2003, 'Hail to the Thief', 14, '56:33', ['MP3'], ['Disc #', 'Art'], null, '', 'D:\\Music\\Radiohead\\HTTT\\'),
+    A(2007, 'In Rainbows', 10, '42:39', ['FLAC'], [], ['#e7c33a', '#c2382d'], '1400 × 1400', '\\\\NAS\\music\\Radiohead\\In Rainbows\\'),
+    A(2011, 'The King of Limbs', 8, '37:34', ['WAV'], ['Tags', 'Art'], null, '', 'D:\\Music\\TKOL wav\\'),
+    A(2016, 'A Moon Shaped Pool', 11, '52:29', ['FLAC'], [], ['#f2f2f0', '#9aa0a4'], '1400 × 1400', '\\\\NAS\\music\\Radiohead\\A Moon Shaped Pool\\'),
+  ],
+  'Portishead': [
+    A(1994, 'Dummy', 11, '48:56', ['FLAC'], [], ['#1e3b4a', '#c9d6d9'], '1000 × 1000', '\\\\NAS\\music\\Portishead\\Dummy\\'),
+    A(1997, 'Portishead', 11, '49:13', ['MP3'], ['Art'], null, '', 'D:\\Music\\Portishead (1997)\\'),
+    A(2008, 'Third', 11, '49:15', ['FLAC'], ['Year'], ['#d9d4c7', '#2b2b2b'], '1200 × 1200', '\\\\NAS\\music\\Portishead\\Third\\'),
+  ],
+  'Kate Bush': [
+    A(1978, 'The Kick Inside', 13, '43:51', ['MP3'], ['Art small'], ['#c79f7e', '#3c2b25'], '250 × 250', 'E:\\iPod_Control\\Music\\F12\\'),
+    A(1985, 'Hounds of Love', 12, '47:31', ['FLAC'], [], ['#3d2f4f', '#c2a37a'], '1400 × 1400', '\\\\NAS\\music\\Kate Bush\\Hounds of Love\\'),
+    A(1989, 'The Sensual World', 11, '43:10', ['M4A'], ['Album artist'], ['#2a2420', '#b78c5a'], '600 × 600', 'C:\\Users\\me\\Music\\iTunes\\Kate Bush\\'),
+  ],
+  'Massive Attack': [
+    A(1991, 'Blue Lines', 9, '45:02', ['MP3'], [], ['#d73a2b', '#f0eee8'], '500 × 500', 'D:\\Music\\Massive Attack\\Blue Lines\\'),
+    A(1994, 'Protection', 10, '50:25', ['MP3'], ['Track #'], ['#cfcac0', '#2f2f2f'], '500 × 500', 'D:\\Music\\Massive Attack\\Protection\\'),
+    A(1998, 'Mezzanine', 11, '63:30', ['FLAC'], [], ['#1f1f1f', '#b9b2a2'], '1400 × 1400', '\\\\NAS\\music\\Massive Attack\\Mezzanine\\'),
+  ],
+  'Aphex Twin': [
+    A(1992, 'Selected Ambient Works 85–92', 13, '74:30', ['MP3'], ['Art', 'Year'], null, '', 'D:\\Downloads\\SAW 85-92\\'),
+  ],
+  'Boards of Canada': [
+    A(1998, 'Music Has the Right to Children', 18, '70:52', ['FLAC'], ['Art small'], ['#7fa3a8', '#e6d6a8'], '320 × 320', '\\\\NAS\\music\\Boards of Canada\\'),
+  ],
+  'Brian Eno': [
+    A(1978, 'Ambient 1: Music for Airports', 4, '48:43', ['WAV'], ['Tags', 'Art'], null, '', 'D:\\Music\\eno airports wav\\'),
+  ],
+  'Burial': [
+    A(2007, 'Untrue', 13, '50:39', ['MP3'], ['Album artist', 'Track #'], ['#2c3a3a', '#8a8f86'], '500 × 500', 'E:\\iPod_Control\\Music\\F03\\'),
+  ],
+  'Cocteau Twins': [
+    A(1990, 'Heaven or Las Vegas', 10, '37:35', ['M4A'], ['Year', 'Art small'], ['#c7a6c9', '#3e2b4b'], '400 × 400', 'C:\\Users\\me\\Music\\iTunes\\Cocteau Twins\\'),
+  ],
+  'Nick Drake': [
+    A(1972, 'Pink Moon', 11, '28:22', ['FLAC'], ['Art'], null, '', '\\\\NAS\\music\\Nick Drake - Pink Moon\\'),
+  ],
+  'Talk Talk': [
+    A(1988, 'Spirit of Eden', 6, '41:26', ['MP3'], ['Album artist', 'Disc #'], ['#3f6b4e', '#d9c27a'], '600 × 600', 'D:\\Music\\Talk Talk\\Spirit of Eden\\'),
+  ],
+};
+const artists = [
+  ['Aphex Twin', 7], ['Björk', 9], ['Boards of Canada', 5], ['Bonobo', 7], ['Brian Eno', 14], ['Burial', 3],
+  ['Cocteau Twins', 8], ['Daft Punk', 5], ['Fleetwood Mac', 11], ['Kate Bush', 3], ['Kraftwerk', 9],
+  ['Massive Attack', 3], ['Miles Davis', 22], ['Nick Drake', 4], ['Portishead', 3], ['Radiohead', 9],
+  ['Talk Talk', 5], ['The Beatles', 13], ['Beatles', 2, 'merge'], ['Various Artists', 41],
+];
+const health = { 'Radiohead': 'warn', 'Portishead': 'warn', 'Kate Bush': 'warn', 'Massive Attack': 'ok', 'Beatles': 'bad', 'Various Artists': 'warn' };
+const tracks = {
+  'OK Computer': [['Airbag', '4:44'], ['Paranoid Android', '6:23'], ['Subterranean Homesick Alien', '4:27'], ['Exit Music (For a Film)', '4:24'],
+    ['Let Down', '4:59'], ['Karma Police', '4:21'], ['Fitter Happier', '1:57'], ['Electioneering', '3:50'], ['Climbing Up the Walls', '4:45'],
+    ['No Surprises', '3:48'], ['Lucky', '4:19'], ['The Tourist', '5:24']],
+  'Dummy': [['Mysterons', '5:02'], ['Sour Times', '4:11'], ['Strangers', '3:58'], ['It Could Be Sweet', '4:20'], ['Wandering Star', '4:51'],
+    ["It's a Fire", '3:49'], ['Numb', '3:54'], ['Roads', '5:05'], ['Pedestal', '3:39'], ['Biscuit', '5:01'], ['Glory Box', '5:06']],
+};
+
+/* ---------- top strip ---------- */
+function ladder(el, pct, cls) {
+  const n = 22, on = Math.round(n * pct);
+  el.innerHTML = Array.from({ length: n }, (_, i) => `<i class="${cls} ${i < on ? 'on' : ''}"></i>`).join('');
+}
+ladder($('#m-tags'), .87, ''); ladder($('#m-art'), .71, 'amber');
+
+document.querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => {
+  const [a, c] = b.dataset.say.split('|'); say(a, c);
+}));
+
+function setView(v) {
+  document.querySelectorAll('#viewkeys .kw').forEach(kw => {
+    const k = kw.querySelector('button'), on = k.dataset.view === v;
+    kw.querySelector('.ledspot').classList.toggle('on', on); k.setAttribute('aria-pressed', on);
+  });
+  document.querySelectorAll('.view').forEach(el => el.classList.toggle('on', el.id === 'v-' + v));
+  const lines = { library: ['4 drives · 1 offline'], missing: ['1,204 need art'], dupes: ['698 dupe groups'], organise: ['Plan ready'] };
+  say(lines[v][0]);
+  $('#applyLed').classList.toggle('on', v === 'organise');
+  try { localStorage.setItem('mb-view', v); } catch (e) {}
+}
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+function setPanel(p) {
+  if (p) document.documentElement.setAttribute('data-theme', p);
+  const cur = document.documentElement.getAttribute('data-theme') ||
+    (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  document.querySelectorAll('#panelkeys .kw').forEach(kw =>
+    kw.querySelector('.ledspot').classList.toggle('on', kw.querySelector('button').dataset.panel === cur));
+}
+document.querySelectorAll('[data-panel]').forEach(b => b.addEventListener('click', () => setPanel(b.dataset.panel)));
+setPanel();
+
+let online = false;
+$('#onlineKey').addEventListener('click', () => {
+  online = !online;
+  $('#onlineLed').classList.toggle('on', online);
+  $('#onlineKey').setAttribute('aria-pressed', online);
+  $('#lcd2b').textContent = online ? 'Lookups on' : 'Lookups off';
+  say(online ? 'MusicBrainz · 1/sec' : 'Nothing sent online');
+  renderMissing(); renderDetail();
+});
+
+$('#applyKey').addEventListener('click', () => {
+  if (!document.querySelector('#v-organise.on')) { say('Open Organise first', 'Plan'); return; }
+  say('Mock-up: not applied', mode === 'copy' ? 'Copy' : 'Move');
+});
+
+/* ---------- side column ---------- */
+$('#drives').innerHTML = drives.map(d => `
+  <div class="drive"><span class="dot ${d.st}" title="${d.st === 'ok' ? 'Online' : 'Offline'}"></span>
+  <span class="nm">${esc(d.name)}</span><span class="ct">${d.n.toLocaleString('en-GB')}</span>
+  <span class="sub">${esc(d.vol)} · ${esc(d.sub)}</span></div>`).join('');
+const fmax = Math.max(...formats.map(f => f[1]));
+$('#formats').innerHTML = formats.map(([f, n]) =>
+  `<span>${f}</span><span class="bar"><i style="width:${(n / fmax * 100).toFixed(1)}%"></i></span><span class="n">${n.toLocaleString('en-GB')}</span>`).join('');
+$('#excluded').innerHTML = excluded.map(([p, w]) =>
+  `<div style="margin-bottom:8px"><span style="color:var(--legend);font-weight:700">${esc(p)}</span><br>${esc(w)}</div>`).join('') +
+  `<div>Change these with Exclude. Excluded files are never scanned again.</div>`;
+
+/* ---------- library ---------- */
+let curArtist = 'Radiohead', curAlbum = 'OK Computer';
+function renderArtists() {
+  const q = $('#findArtist').value.trim().toLowerCase();
+  $('#artists').innerHTML = artists.filter(a => a[0].toLowerCase().includes(q)).map(([n, c, m]) => `
+    <div class="li ${n === curArtist ? 'sel' : ''}" data-artist="${esc(n)}" tabindex="0">
+      <span class="nm">${esc(n)} ${m ? '<span class="chip solid">Merge?</span>' : ''}</span><span class="c">${c}</span>
+      <span class="dot ${health[n] || 'ok'}"></span></div>`).join('');
+}
+$('#findArtist').addEventListener('input', renderArtists);
+$('#artists').addEventListener('click', e => {
+  const li = e.target.closest('[data-artist]'); if (!li) return;
+  curArtist = li.dataset.artist;
+  curAlbum = albums[curArtist] ? albums[curArtist][0].title : null;
+  if (curArtist === 'Beatles') say('Merge Beatles into', 'The Beatles?'); else say(curArtist);
+  renderArtists(); renderAlbums(); renderDetail();
+});
+$('#artists').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.click(); });
+
+function thumb(a) {
+  return a.art ? `<div class="thumb" style="background:linear-gradient(135deg,${a.art[0]} 0 55%,${a.art[1]} 55%)"></div>`
+               : `<div class="thumb none">NO ART</div>`;
+}
+function needChips(a) {
+  if (!a.needs.length) return '<span class="chip ok">Complete</span>';
+  return a.needs.map(n => `<span class="chip ${n === 'Art small' ? 'warn' : 'miss'}">${esc(n)}</span>`).join('');
+}
+function renderAlbums() {
+  const list = albums[curArtist];
+  $('#albumsTitle').textContent = 'Albums · ' + curArtist;
+  if (!list) {
+    $('#albums').innerHTML = `<tr><td colspan="7" class="hint" style="padding:18px 10px">${curArtist === 'Beatles'
+      ? '2 albums are tagged "Beatles". Music Box suggests merging them into The Beatles. Nothing changes until you accept it in the plan.'
+      : 'The mock-up only has sample albums for some artists. Try Radiohead, Portishead or Kate Bush.'}</td></tr>`;
+    return;
+  }
+  $('#albums').innerHTML = list.map(a => `
+    <tr class="clk ${a.title === curAlbum ? 'sel' : ''}" data-album="${esc(a.title)}">
+      <td>${thumb(a)}</td><td class="m r">${a.needs.includes('Year') ? '<span style="color:var(--led)">----</span>' : a.year}</td>
+      <td>${esc(a.title)}</td><td class="m r">${a.tracks}</td><td class="m r">${a.time}</td>
+      <td><div class="chips">${a.fmt.map(f => `<span class="chip ${['FLAC', 'WAV', 'AIFF'].includes(f) ? 'lossless' : 'lossy'}">${f}</span>`).join('')}</div></td>
+      <td><div class="chips">${needChips(a)}</div></td></tr>`).join('');
+}
+$('#albums').addEventListener('click', e => {
+  const tr = e.target.closest('[data-album]'); if (!tr) return;
+  curAlbum = tr.dataset.album; say(curArtist + ' · ' + curAlbum);
+  renderAlbums(); renderDetail();
+});
+
+function renderDetail() {
+  const a = (albums[curArtist] || []).find(x => x.title === curAlbum);
+  if (!a) { $('#detail').innerHTML = '<p class="hint">Choose an album.</p>'; return; }
+  const f = (k, v, miss, warn) => `<span class="dot ${miss ? 'bad' : warn ? 'warn' : 'ok'}"></span><span class="k">${k}</span>` +
+    (miss ? `<span class="v missing">MISSING</span>` : `<span class="v">${esc(v)}</span>`);
+  const lossless = a.fmt.some(x => ['FLAC', 'WAV', 'AIFF'].includes(x));
+  const art = a.art ? `<div class="art" style="background:linear-gradient(135deg,${a.art[0]} 0 55%,${a.art[1]} 55%)"><span class="px">${a.px}</span></div>`
+                    : `<div class="art none">NO<br>ARTWORK</div>`;
+  const tl = tracks[a.title];
+  const match = online ? `MusicBrainz match 98% · cover 1200 × 1200 found` : 'Turn on Lookups to search MusicBrainz and the Cover Art Archive.';
+  $('#detail').innerHTML = `
+    <div class="dhead">${art}
+      <div class="fields">
+        ${f('Title', a.title)}${f('Artist', curArtist)}
+        ${f('Album artist', curArtist, a.needs.includes('Album artist'))}
+        ${f('Year', a.year, a.needs.includes('Year'))}
+        ${f('Disc', '1 of 1', a.needs.includes('Disc #'))}
+        ${f('Tracks', a.tracks + ' · ' + a.time, a.needs.includes('Track #'))}
+        ${f('Format', a.fmt.length > 1 ? a.fmt.join(' + ') + ' (2 copies)' : a.fmt[0] + (lossless ? ' · 16/44.1' : ' · 320k'), false, a.fmt.length > 1)}
+        ${f('Artwork', a.px, !a.art, a.needs.includes('Art small'))}
+      </div></div>
+    <div class="dkeys">
+      <div class="kw"><span class="ledspot none"></span><button class="key k-cream" onclick="say('Edit tags','Staged only')"></button><span class="lab">Edit</span></div>
+      <div class="kw"><span class="ledspot none"></span><button class="key k-cream" ${online ? '' : 'aria-disabled="true"'} onclick="say(${online} ? 'Looking up MusicBrainz' : 'Turn on Lookups first')"></button><span class="lab">Look up</span></div>
+      <div class="kw"><span class="ledspot none"></span><button class="key k-cream" onclick="say('Open folder')"></button><span class="lab">Folder</span></div>
+      <div class="kw"><span class="ledspot none"></span><button class="key k-grey" onclick="say('Send to Spool', 'Play album')"></button><span class="lab">Spool</span></div>
+    </div>
+    <div class="hint">${match}</div>
+    <div class="loc">${esc(a.loc)}${a.dupe ? '<br>Also on E:\\iPod_Control\\Music\\F12\\ as MP3 (see Dupes)' : ''}</div>
+    <div class="well" style="flex:1"><table><thead><tr><th class="r" style="width:36px">#</th><th>Title</th><th class="r">Time</th></tr></thead><tbody>
+      ${tl ? tl.map((t, i) => `<tr><td class="m r">${String(i + 1).padStart(2, '0')}</td><td>${esc(t[0])}</td><td class="m r">${t[1]}</td></tr>`).join('')
+           : `<tr><td colspan="3" class="hint">Track list sample is filled in for OK Computer and Dummy.</td></tr>`}
+    </tbody></table></div>`;
+}
+
+/* ---------- missing ---------- */
+const tilesData = [
+  ['art', 'No artwork', 1204, 'albums'], ['small', 'Artwork under 500 px', 610, 'albums'], ['year', 'No year', 3880, 'tracks'],
+  ['aa', 'No album artist', 2106, 'tracks'], ['track', 'No track number', 742, 'tracks'], ['untagged', 'No tags at all', 412, 'files · named only'],
+];
+let curTile = 'art';
+function renderMissing() {
+  $('#tiles').innerHTML = tilesData.map(([k, t, n, u]) => `
+    <button class="lcd tile ${k === curTile ? 'sel' : ''}" data-tile="${k}"><span class="t">${t}</span><span class="n">${n.toLocaleString('en-GB')}</span><span class="u">${u}</span></button>`).join('') +
+    `<p class="hint" style="margin:6px 2px 0">The fields Music Box checks: artist, album artist, album, year, disc and track number, title, time and artwork. Every other tag in your files is kept as it is.</p>`;
+  const rows = [];
+  for (const [ar, list] of Object.entries(albums)) for (const a of list) {
+    const has = { art: !a.art, small: a.needs.includes('Art small'), year: a.needs.includes('Year'), aa: a.needs.includes('Album artist'),
+      track: a.needs.includes('Track #') || a.needs.includes('Disc #'), untagged: a.needs.includes('Tags') }[curTile];
+    if (has) rows.push([ar, a]);
+  }
+  $('#missTitle').textContent = tilesData.find(t => t[0] === curTile)[1];
+  $('#matchHead').textContent = online ? 'Online match' : 'Online match (Lookups off)';
+  const pct = [98, 95, 91, 99, 87, 93];
+  $('#missRows').innerHTML = rows.map(([ar, a], i) => `
+    <tr><td>${esc(ar)}</td><td>${esc(a.title)}</td><td class="m r">${a.needs.includes('Year') ? '----' : a.year}</td>
+    <td><div class="chips">${needChips(a)}</div></td><td class="loc">${esc(a.loc)}</td>
+    <td>${online ? `<span class="chip ok">MusicBrainz ${pct[i % pct.length]}%</span> <span class="chip lossy">Stage</span>`
+                 : '<span class="m" style="color:var(--legend-dim)">--</span>'}</td></tr>`).join('') ||
+    `<tr><td colspan="6" class="hint">No sample albums in this group.</td></tr>`;
+}
+$('#tiles').addEventListener('click', e => {
+  const t = e.target.closest('[data-tile]'); if (!t) return;
+  curTile = t.dataset.tile; renderMissing();
+  const d = tilesData.find(x => x[0] === curTile); say(d[1], d[2].toLocaleString('en-GB'));
+});
+
+/* ---------- dupes ---------- */
+const dupes = [
+  { title: 'Radiohead · OK Computer', type: 'Same recording, other format', copies: [
+    ['D:\\Downloads\\radiohead-ok_computer-1997-FLAC\\', 'FLAC 16/44.1', '12 / 12', 'Album artist missing', true],
+    ['E:\\iPod_Control\\Music\\F12\\ (scrambled names)', 'MP3 192k', '12 / 12', 'Complete', false],
+    ['D:\\Music\\Radiohead\\OK Computer [1997]\\', 'MP3 320k', '11 / 12', 'Track 07 missing', false]] },
+  { title: 'Portishead · Dummy', type: 'Same audio, other tags', copies: [
+    ['\\\\NAS\\music\\Portishead\\Dummy\\', 'FLAC 16/44.1', '11 / 11', 'Complete', true],
+    ['D:\\Music\\Portishead - Dummy (2014 copy)\\', 'FLAC 16/44.1', '11 / 11', 'Year missing', false]] },
+  { title: 'Massive Attack · Teardrop', type: 'Identical files', copies: [
+    ['D:\\Music\\Massive Attack\\Mezzanine\\03 Teardrop.mp3', 'MP3 320k', '1', 'Complete', true],
+    ['D:\\Music\\Massive Attack\\Mezzanine\\03 Teardrop (1).mp3', 'MP3 320k', '1', 'Complete', false],
+    ['C:\\Users\\me\\Music\\Teardrop.mp3', 'MP3 320k', '1', 'Complete', false]] },
+];
+function renderDupes() {
+  $('#dupes').innerHTML = dupes.map((g, gi) => `
+    <div class="dgroup"><header><b>${esc(g.title)}</b><span class="chip warn">${g.type}</span><span class="hint">${g.copies.length} copies</span></header>
+    <table style="table-layout:fixed"><colgroup><col style="width:110px"><col><col style="width:150px"><col style="width:90px"><col style="width:220px"></colgroup><thead><tr><th>Keep</th><th>Location</th><th>Format</th><th class="r">Tracks</th><th>Tags</th></tr></thead><tbody>
+    ${g.copies.map((c, ci) => `<tr><td><span class="keep"><button class="lens ${c[4] ? 'on' : ''}" data-g="${gi}" data-c="${ci}" aria-label="Keep this copy" aria-pressed="${c[4]}"></button>${c[4] ? 'KEEP' : ''}</span></td>
+      <td class="loc" style="color:var(--legend)">${esc(c[0])}</td><td class="m">${c[1]}</td><td class="m r">${c[2]}</td>
+      <td>${c[3] === 'Complete' ? '<span class="chip ok">Complete</span>' : `<span class="chip miss">${esc(c[3])}</span>`}</td></tr>`).join('')}
+    </tbody></table></div>`).join('');
+}
+$('#dupes').addEventListener('click', e => {
+  const b = e.target.closest('.lens'); if (!b) return;
+  const g = dupes[+b.dataset.g]; g.copies.forEach((c, i) => c[4] = i === +b.dataset.c);
+  say('Keep ' + g.copies[+b.dataset.c][1], 'To review');
+  renderDupes();
+});
+
+/* ---------- organise ---------- */
+const I = n => '<span class="ind"></span>'.repeat(n);
+$('#treeNow').innerHTML = [
+  ['d', 0, 'D:\\Downloads'], ['d', 1, 'radiohead-ok_computer-1997-FLAC'], ['f', 2, '01-airbag.flac'], ['f', 2, '02-paranoid_android.flac'], ['g', 2, '… 10 more'],
+  ['d', 0, 'D:\\Music'], ['d', 1, 'Portishead (1997)'], ['f', 2, 'Track01.mp3'], ['g', 2, '… 10 more'],
+  ['d', 1, 'Radiohead - The Bends'], ['g', 2, '12 files'],
+  ['d', 1, 'Radiohead\\OK Computer [1997]'], ['w', 2, '11 files · duplicate of the FLAC copy'],
+  ['d', 1, 'TKOL wav'], ['x', 2, '8 files · no tags, named from folder'],
+  ['d', 0, 'E:\\iPod_Control\\Music  (offline)'], ['d', 1, 'F07'], ['f', 2, 'XKQB.mp3'], ['f', 2, 'BWRT.mp3'], ['g', 2, '… 6,400 more'],
+  ['d', 0, 'C:\\Users\\me\\Music\\iTunes'], ['d', 1, 'Kate Bush'], ['f', 2, '01 Wow.m4a'], ['g', 2, '… 10 more'],
+].map(([c, n, t]) => `<div class="${c}">${I(n)}${esc(t)}</div>`).join('');
+$('#treeNew').innerHTML = [
+  ['d', 0, 'M:\\Music'], ['d', 1, 'Kate Bush'], ['d', 2, '1989 - The Sensual World'], ['new', 3, '01 The Sensual World.m4a'], ['g', 3, '… 10 more'],
+  ['d', 1, 'Portishead'], ['d', 2, '1994 - Dummy'], ['d', 2, '1997 - Portishead'], ['new', 3, '01 Cowboys.mp3'], ['g', 3, '… 10 more'],
+  ['d', 1, 'Radiohead'], ['d', 2, '1993 - Pablo Honey'], ['new', 3, '01 You.mp3'], ['g', 3, '… 11 more'],
+  ['d', 2, '1995 - The Bends'], ['d', 2, '1997 - OK Computer'], ['new', 3, '01 Airbag.flac'], ['new', 3, '02 Paranoid Android.flac'], ['g', 3, '… 10 more'],
+  ['d', 2, '2011 - The King of Limbs'], ['w', 3, 'Needs tags before it can be placed'],
+  ['d', 1, 'Various Artists'], ['d', 2, '2003 - Late Night Tales'], ['g', 3, '18 files'],
+  ['d', 0, 'M:\\Music Box Review'], ['w', 1, 'Duplicates you chose not to keep'],
+].map(([c, n, t]) => `<div class="${c}">${I(n)}${esc(t)}</div>`).join('');
+
+let mode = 'copy';
+function renderPlan() {
+  const items = [
+    ['Copy into Music', '57,102', ''], ['Rename to the pattern', '41,880', ''], ['Write tags', '6,412', ''],
+    ['Duplicates to Review', '1,333', ''], ['Needs you first', '14', 'need'], ['Left where they are', '1,257', ''],
+  ];
+  items[0][0] = mode === 'copy' ? 'Copy into Music' : 'Move into Music';
+  $('#plan').innerHTML = items.map(([t, n, c]) => `<div class="lcd ${c}"><span>${t}</span><span class="n">${n}</span></div>`).join('') +
+    `<div class="lcd"><span>Space needed</span><span class="n">${mode === 'copy' ? '1.21 TB' : '0 TB'}</span></div>
+     <div class="lcd"><span>Free on M:</span><span class="n">2.80 TB</span></div>
+     <p class="hint">${mode === 'copy'
+       ? 'Copy leaves the originals where they are. Each copy is checked against its original before it counts as done.'
+       : 'Move checks each copy against its original, then removes the original. Every step is logged and can be undone.'}
+     The 14 items that need you are name clashes and albums with no tags.</p>`;
+  document.querySelectorAll('#modekeys .kw').forEach(kw => kw.querySelector('.ledspot').classList.toggle('on', kw.querySelector('button').dataset.mode === mode));
+}
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.mode; renderPlan(); say(mode === 'copy' ? 'Copy · keep originals' : 'Move · after checking', mode === 'copy' ? 'Safe' : 'Logged');
+}));
+
+/* ---------- fit to window ---------- */
+function fit() {
+  const rack = $('#rack'), avail = document.documentElement.clientWidth - 32;
+  rack.style.zoom = avail < 1560 ? (avail / 1560).toFixed(4) : '';
+}
+addEventListener('resize', fit);
+
+renderArtists(); renderAlbums(); renderDetail(); renderMissing(); renderDupes(); renderPlan(); fit();
+try { const v = localStorage.getItem('mb-view'); if (v) setView(v); else say('4 drives · 1 offline'); } catch (e) {}
+</script>
+</body></html>
