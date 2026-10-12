@@ -1,0 +1,28 @@
+[workspace]
+members = ["crates/mb-core"]
+
+[workspace.package]
+# The release version for the whole project.
+version = "0.1.0"
+edition = "2021"
+
+[package]
+name = "music-box"
+version.workspace = true
+edition.workspace = true
+description = "Music Box: a native music library manager for Windows and Linux"
+authors = ["Timster's Audio Works"]
+publish = false
+
+[dependencies]
+mb-core = { path = "crates/mb-core" }
+eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts", "persistence", "wayland", "x11"] }
+egui = "0.36"
+rfd = "0.17"
+serde = { version = "1", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

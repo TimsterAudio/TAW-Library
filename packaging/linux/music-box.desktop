@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Music Box
+Comment=Music library manager by Timster's Audio Works
+Exec=music-box
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupWMClass=music-box
