@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.1.0 – 2026-10-12
+## 0.1.0 – 2026-10-13
 
 The first version: stage 1, scan and report. Music Box only reads your music.
 
