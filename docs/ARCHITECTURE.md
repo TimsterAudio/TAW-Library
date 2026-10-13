@@ -4,7 +4,7 @@
             ┌──────────────── UI thread (eframe / egui) ────────────────┐
             │ ui/app.rs    top strip, drives column, footer, polling    │
             │ ui/views.rs  Library, What's Missing, later views         │
-            │ ui/parts.rs  lists, chips, lights   ui/widgets.rs  keys…  │
+            │ taw-panel    theme, keys, displays, lists (shared crate)  │
             └──────┬──────────────────────▲─────────────────▲───────────┘
                    │ start / stop         │ Progress        │ textures
             ┌──────▼───────┐   ┌──────────┴─────┐   ┌───────┴────────┐
@@ -29,7 +29,7 @@
 | `mb-core/src/scan.rs` | Walks each drive, reads new or changed files, and forgets files that have gone (only under folders that were scanned completely). Batches are committed every 400 files or 2 seconds, so the panel fills in as it goes. A cancelled scan keeps what it read. |
 | `mb-core/src/library.rs` | Builds albums and artists from the tracks, works out what each album is missing, and suggests artist merges. Albums are grouped by drive, album folder (CD1/CD2 folders join their parent) and album name, so copies on two drives stay two albums for the Dupes view to find. |
 | `src/workers.rs` | The scan thread, the drive watcher and the artwork loader. |
-| `src/ui/*` | The panel. `theme.rs` and `widgets.rs` come from EQ Box. |
+| `src/ui/*` | The panel: `app.rs` and `views.rs`. The theme, keys, displays and list pieces come from the shared `taw-panel` crate (TimsterAudio/TAW-Panel). |
 
 ## Rules the code keeps
 

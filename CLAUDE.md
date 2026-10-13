@@ -10,7 +10,7 @@ Music Box is a native music library manager by Timster's Audio Works, written in
 - **No network requests unless Lookups is switched on.** Fonts and the icon are built into the binary.
 - **The library engine stays free of UI code.** Everything in `crates/mb-core` is plain Rust and unit tested.
 - **Never break the database or saved settings.** Schema changes go through a migration keyed on `meta.schema`. `Saved` in `ui/app.rs` uses `#[serde(default)]`: add fields with defaults; never rename or repurpose one.
-- **Keep the panel code in step with EQ Box.** `ui/theme.rs` and `ui/widgets.rs` come from EQ Box; a change to the shared look goes to both until the family has one panel crate.
+- **The look comes from TAW-Panel.** `ui::theme`, `ui::widgets` and `ui::parts` are the shared `taw-panel` crate, pinned by commit in Cargo.toml. Change the shared look in TAW-Panel, then move the pin; only Library-specific drawing lives here.
 
 ## Checks before pushing
 

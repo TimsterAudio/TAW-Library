@@ -6,7 +6,7 @@ use super::theme::*;
 use super::widgets::*;
 use crate::workers::{ArtLoader, DriveWatch, ScanRun};
 use egui::text::{LayoutJob, TextFormat};
-use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Stroke, StrokeKind, Ui, Vec2};
+use egui::{Align2, CornerRadius, Id, Pos2, Rect, Stroke, StrokeKind, Ui, Vec2};
 use mb_core::db::{Db, VolumeRow};
 use mb_core::excludes::{Rule, RuleKind};
 use mb_core::library::{Library, Missing};
@@ -14,6 +14,7 @@ use mb_core::volumes::{self, Kind, Volume};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::Relaxed;
+use taw_panel::frame::draw_panel_bg;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const STORAGE_KEY: &str = "music-box";
@@ -303,21 +304,6 @@ impl MusicBox {
     }
 
     // ------------------------------------------------------------ frame
-
-    fn fit_to_window(&self, ui: &Ui) {
-        // Lay out at the window's size, but never smaller than DESIGN_MIN:
-        // below that the whole panel scales down.
-        let ctx = ui.ctx();
-        let zoom = ctx.zoom_factor();
-        let screen = ctx.content_rect().size() * zoom;
-        let want = (screen.x / DESIGN_MIN.x)
-            .min(screen.y / DESIGN_MIN.y)
-            .clamp(0.3, 1.0);
-        if (want - zoom).abs() > 0.002 {
-            ctx.set_zoom_factor(want);
-            ctx.request_repaint();
-        }
-    }
 
     fn top_strip(&mut self, ui: &mut Ui, panel: Rect, th: &Theme) {
         let o = panel.min.to_vec2();
@@ -1098,31 +1084,11 @@ pub(crate) fn set_visuals(ctx: &egui::Context, th: &Theme) {
     }
 }
 
-pub(crate) fn draw_panel_bg(p: &egui::Painter, rect: Rect, th: &Theme) {
-    p.rect_filled(rect, 0, th.panel);
-    if th.silver {
-        // Faint brushed texture.
-        let mut x = rect.left();
-        while x < rect.right() {
-            p.line_segment(
-                [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-                Stroke::new(1.0, Color32::from_white_alpha(14)),
-            );
-            x += 3.0;
-        }
-    } else {
-        p.rect_filled(
-            Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)),
-            0,
-            Color32::from_white_alpha(8),
-        );
-    }
-}
-
 impl eframe::App for MusicBox {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
-        self.fit_to_window(ui);
-        let th = Theme::new(self.s.panel);
+        // Never larger than designed: on a big window the lists get the room.
+        taw_panel::frame::fit_to_window(ui.ctx(), DESIGN_MIN, 1.0);
+        let th = Theme::panel(self.s.panel);
         set_visuals(ui.ctx(), &th);
         self.poll(&ui.ctx().clone());
 

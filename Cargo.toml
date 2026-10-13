@@ -20,6 +20,7 @@ eframe = { version = "0.36", default-features = false, features = ["glow", "defa
 egui = "0.36"
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
+taw-panel = { git = "https://github.com/TimsterAudio/TAW-Panel", rev = "29de12e21142d9f87ae85b708ed89ea18421621c" } # 0.1.0
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [profile.release]

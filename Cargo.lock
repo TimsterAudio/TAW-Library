@@ -1328,6 +1328,7 @@ dependencies = [
  "mb-core",
  "rfd",
  "serde",
+ "taw-panel",
 ]
 
 [[package]]
@@ -2351,6 +2352,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "taw-panel"
+version = "0.1.0"
+source = "git+https://github.com/TimsterAudio/TAW-Panel?rev=29de12e21142d9f87ae85b708ed89ea18421621c#29de12e21142d9f87ae85b708ed89ea18421621c"
+dependencies = [
+ "egui",
+ "serde",
 ]
 
 [[package]]

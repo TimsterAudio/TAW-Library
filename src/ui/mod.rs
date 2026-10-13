@@ -1,5 +1,6 @@
 pub mod app;
-pub mod parts;
-pub mod theme;
 pub mod views;
-pub mod widgets;
+
+// The shared Timster's Audio Works panel.
+pub use taw_panel::lists as parts;
+pub use taw_panel::{theme, widgets};
