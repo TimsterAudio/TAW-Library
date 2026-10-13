@@ -27,5 +27,5 @@
 - [ ] Copy (default) or move, each copy checked against its original, with undo
 
 ## Later
-- [ ] Hand albums and playlists to the TAW Player
+- [x] Hand albums and playlists to the TAW Player (albums; playlists when the Library has them)
 - [ ] The shared panel crate for the family (see docs/ECOSYSTEM.md)

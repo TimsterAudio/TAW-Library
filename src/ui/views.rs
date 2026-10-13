@@ -721,9 +721,28 @@ impl LibraryApp {
         let file = dir.join(format!("{safe}.m3u8"));
         match std::fs::write(&file, m3u) {
             Ok(()) => {
-                open_path(&file);
                 self.touch("Play", a.title.clone());
-                self.tell("Playing in your default music player. The TAW Player will take this over when it's ready.");
+                let started = find_player().map(|exe| {
+                    std::process::Command::new(&exe)
+                        .arg("--play")
+                        .arg(&file)
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .spawn()
+                        .is_ok()
+                });
+                match started {
+                    Some(true) => self.tell("Playing in the TAW Player."),
+                    Some(false) => {
+                        open_path(&file);
+                        self.tell("The TAW Player wouldn't start, so it's playing in your default music player.");
+                    }
+                    None => {
+                        open_path(&file);
+                        self.tell("Playing in your default music player (the TAW Player isn't next to the Library or on the PATH).");
+                    }
+                }
             }
             Err(e) => self.tell(format!("Couldn't make the playlist: {e}")),
         }
@@ -1094,10 +1113,84 @@ fn draw_art(
 }
 
 /// Opens a file or folder with the computer's default program.
+/// Where to look for the TAW Player: next to the Library, in a folder beside
+/// the Library's named after it (two unzipped downloads side by side), then
+/// the PATH.
+fn player_candidates(
+    here: Option<&std::path::Path>,
+    path_var: Option<&std::ffi::OsStr>,
+) -> Vec<std::path::PathBuf> {
+    let exe = if cfg!(windows) {
+        "taw-player.exe"
+    } else {
+        "taw-player"
+    };
+    let mut v = Vec::new();
+    if let Some(dir) = here {
+        v.push(dir.join(exe));
+        if let Some(Ok(rd)) = dir.parent().map(std::fs::read_dir) {
+            let mut sib: Vec<_> = rd
+                .flatten()
+                .filter(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .to_ascii_lowercase()
+                        .starts_with("taw-player")
+                })
+                .map(|e| e.path().join(exe))
+                .collect();
+            // The newest version first.
+            sib.sort();
+            sib.reverse();
+            v.extend(sib);
+        }
+    }
+    if let Some(p) = path_var {
+        v.extend(std::env::split_paths(p).map(|d| d.join(exe)));
+    }
+    v
+}
+
+/// The TAW Player, if it's installed where the Library can find it.
+fn find_player() -> Option<std::path::PathBuf> {
+    let here = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(std::path::Path::to_path_buf));
+    let path = std::env::var_os("PATH");
+    player_candidates(here.as_deref(), path.as_deref())
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
 pub fn open_path(path: &std::path::Path) {
     #[cfg(windows)]
     let r = std::process::Command::new("explorer").arg(path).spawn();
     #[cfg(not(windows))]
     let r = std::process::Command::new("xdg-open").arg(path).spawn();
     let _ = r;
+}
+
+#[cfg(test)]
+mod player_tests {
+    use super::player_candidates;
+
+    #[test]
+    fn looks_beside_then_siblings_then_path() {
+        let d = std::env::temp_dir().join(format!("taw-library-player-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let here = d.join("taw-library-0.2.0");
+        std::fs::create_dir_all(&here).unwrap();
+        std::fs::create_dir_all(d.join("taw-player-0.1.0")).unwrap();
+        let path = std::env::join_paths([d.join("bin")]).unwrap();
+        let c = player_candidates(Some(&here), Some(&path));
+        let exe = if cfg!(windows) {
+            "taw-player.exe"
+        } else {
+            "taw-player"
+        };
+        assert_eq!(c[0], here.join(exe));
+        assert_eq!(c[1], d.join("taw-player-0.1.0").join(exe));
+        assert_eq!(c[2], d.join("bin").join(exe));
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }

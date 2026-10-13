@@ -16,7 +16,7 @@ It's a desktop program written in Rust (egui for the panel). It isn't an HTML pa
 - **Library view**: artists, their albums by year with what each is missing, and an album's details, artwork and tracks. Albums split into CD1/CD2 folders are put back together.
 - **What's Missing view**: albums with no artwork, artwork under 500 px, no year, no album artist, no track numbers, repeated track numbers with no disc numbers, and files with no tags at all. Click one to go to it.
 - **Merge suggestions**: "Beatles" and "The Beatles" are flagged as probably the same artist.
-- **Play** sends an album to your default music player as a playlist (until the TAW Player can take it).
+- **Play** sends an album to the TAW Player when it's installed (next to the Library, in a folder beside it, or on the PATH), and to your default music player as a playlist when it isn't.
 - **Black or Silver panel**, remembered with the rest of your view.
 
 ## Coming next

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Play sends the album to the TAW Player when it's installed, and to the default music player when it isn't.
+
 ## 0.2.0 – 2026-10-13
 
 Music Box is now **Timster's Audio Works Library** (LB-001), one of the family's hi-fi separates with the Player, Equaliser and Analyser.
