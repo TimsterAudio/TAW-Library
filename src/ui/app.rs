@@ -1,4 +1,4 @@
-//! The Music Box panel: the top strip, the drives column, the footer, and
+//! The Library panel: the top strip, the drives column, the footer, and
 //! the view that's chosen with the View keys.
 
 use super::parts::*;
@@ -17,7 +17,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use taw_panel::frame::draw_panel_bg;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const STORAGE_KEY: &str = "music-box";
+const STORAGE_KEY: &str = "taw-library";
 
 /// Below this size the whole panel scales down instead of squeezing.
 pub const DESIGN_MIN: Vec2 = Vec2::new(1560.0, 880.0);
@@ -71,7 +71,7 @@ pub struct Saved {
     pub missing: usize,
 }
 
-pub struct MusicBox {
+pub struct LibraryApp {
     pub s: Saved,
     pub db: Option<Db>,
     pub db_path: PathBuf,
@@ -100,16 +100,17 @@ pub fn now() -> f64 {
         .unwrap_or(0.0)
 }
 
-impl MusicBox {
+impl LibraryApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         install_fonts(&cc.egui_ctx);
         let s: Saved = cc
             .storage
             .and_then(|st| eframe::get_value(st, STORAGE_KEY))
             .unwrap_or_default();
-        let db_path = std::env::var_os("MUSIC_BOX_DB")
-            .map(PathBuf::from)
-            .unwrap_or_else(Db::default_path);
+        let custom = std::env::var_os("TAW_LIBRARY_DB").map(PathBuf::from);
+        // A Music Box 0.1 library moves into the family's folder once.
+        let moved = custom.is_none() && Db::move_old_library().unwrap_or(false);
+        let db_path = custom.unwrap_or_else(Db::default_path);
         let (db, db_error) = match Db::open(&db_path) {
             Ok(db) => (Some(db), None),
             Err(e) => (
@@ -120,7 +121,7 @@ impl MusicBox {
                 )),
             ),
         };
-        let mut app = MusicBox {
+        let mut app = LibraryApp {
             s,
             db,
             db_path,
@@ -157,6 +158,11 @@ impl MusicBox {
             };
         }
         app.reload();
+        if moved {
+            app.tell(
+                "Your Music Box library moved to the Library's new folder. Nothing was rescanned.",
+            );
+        }
         app
     }
 
@@ -324,7 +330,7 @@ impl MusicBox {
                 },
             );
             job.append(
-                "Music Box",
+                "Library",
                 0.0,
                 TextFormat {
                     font_id: font(F_MAKER_BOLD, 13.0),
@@ -345,7 +351,7 @@ impl MusicBox {
         slanted_text(
             ui,
             at(24.0, 50.0),
-            "MUSIC BOX",
+            "LIBRARY",
             font(F_LOGO, 30.0),
             th.legend,
             3.0,
@@ -355,7 +361,7 @@ impl MusicBox {
             ui.painter(),
             at(22.0, 92.0),
             Align2::LEFT_TOP,
-            &format!("MB-1 · MUSIC LIBRARY MANAGER · V{VERSION}"),
+            &format!("LB-001 · MUSIC LIBRARY MANAGER · V{VERSION}"),
             font(F_LEGEND, 10.0),
             th.legend_dim,
             2.4,
@@ -647,7 +653,7 @@ impl MusicBox {
         let now_s = mb_core::now_secs();
 
         // Drives
-        // A drive is a hand-added folder when Music Box can't see it as a
+        // A drive is a hand-added folder when the Library can't see it as a
         // mounted drive (a network share with no drive letter, for one).
         let added = |v: &VolumeRow, mounted: &[Volume]| {
             matches!(v.kind, Kind::Folder | Kind::Network) && !mounted.iter().any(|m| m.id == v.id)
@@ -1042,7 +1048,7 @@ impl MusicBox {
             p,
             Pos2::new(panel.left() + 22.0, y),
             Align2::LEFT_CENTER,
-            "Click an artist or album to see it · Scan reads only what changed since last time · Music Box doesn't change your files",
+            "Click an artist or album to see it · Scan reads only what changed since last time · the Library doesn't change your files",
             font(F_LEGEND, 12.0),
             th.legend_dim,
             0.0,
@@ -1084,7 +1090,7 @@ pub(crate) fn set_visuals(ctx: &egui::Context, th: &Theme) {
     }
 }
 
-impl eframe::App for MusicBox {
+impl eframe::App for LibraryApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         // Never larger than designed: on a big window the lists get the room.
         taw_panel::frame::fit_to_window(ui.ctx(), DESIGN_MIN, 1.0);

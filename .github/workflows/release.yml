@@ -23,7 +23,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
 jobs:
   version:
@@ -65,29 +64,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      # TAW-Panel is a private repo: cargo fetches it with a read-only token
-      # (repo secret TAW_PANEL_TOKEN). Not needed if TAW-Panel is public.
-      - name: Access TAW-Panel
-        shell: bash
-        env:
-          TOKEN: ${{ secrets.TAW_PANEL_TOKEN }}
-        run: |
-          if [ -n "$TOKEN" ]; then
-            git config --global url."https://x-access-token:${TOKEN}@github.com/TimsterAudio/TAW-Panel".insteadOf "https://github.com/TimsterAudio/TAW-Panel"
-          fi
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
       - name: Package
         run: |
-          name="music-box-${{ needs.version.outputs.version }}-linux-x86_64"
+          name="taw-library-${{ needs.version.outputs.version }}-linux-x86_64"
           mkdir "$name"
-          cp target/release/music-box packaging/linux/*.desktop README.md CHANGELOG.md "$name/"
+          cp target/release/taw-library packaging/linux/*.desktop README.md CHANGELOG.md "$name/"
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-linux
-          path: music-box-*.tar.gz
+          path: taw-library-*.tar.gz
 
   windows:
     name: Package Windows
@@ -96,30 +85,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      # TAW-Panel is a private repo: cargo fetches it with a read-only token
-      # (repo secret TAW_PANEL_TOKEN). Not needed if TAW-Panel is public.
-      - name: Access TAW-Panel
-        shell: bash
-        env:
-          TOKEN: ${{ secrets.TAW_PANEL_TOKEN }}
-        run: |
-          if [ -n "$TOKEN" ]; then
-            git config --global url."https://x-access-token:${TOKEN}@github.com/TimsterAudio/TAW-Panel".insteadOf "https://github.com/TimsterAudio/TAW-Panel"
-          fi
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
       - name: Package
         shell: pwsh
         run: |
-          $name = "music-box-${{ needs.version.outputs.version }}-windows-x86_64"
+          $name = "taw-library-${{ needs.version.outputs.version }}-windows-x86_64"
           New-Item -ItemType Directory $name | Out-Null
-          Copy-Item target/release/music-box.exe, README.md, CHANGELOG.md $name
+          Copy-Item target/release/taw-library.exe, README.md, CHANGELOG.md $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-windows
-          path: music-box-*.zip
+          path: taw-library-*.zip
 
   publish:
     name: Publish release
@@ -143,10 +122,10 @@ jobs:
 
           ## Downloads
 
-          - **Linux** (`…-linux-x86_64.tar.gz`): extract it and run `./music-box`.
-          - **Windows** (`…-windows-x86_64.zip`): extract it and run `music-box.exe`.
+          - **Linux** (`…-linux-x86_64.tar.gz`): extract it and run `./taw-library`.
+          - **Windows** (`…-windows-x86_64.zip`): extract it and run `taw-library.exe`.
 
-          Music Box only reads your music files. It never changes, moves or deletes them.
+          The Library only reads your music files. It never changes, moves or deletes them.
           EOF
           cat notes.md
       - name: Create the release, or attach to the existing one
@@ -161,6 +140,6 @@ jobs:
             gh release create "v$ver" dist/* \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title "Music Box $ver" \
+              --title "TAW Library $ver" \
               --notes-file notes.md
           fi

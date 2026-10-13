@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.0 – 2026-10-13
+
+Music Box is now **Timster's Audio Works Library** (LB-001), one of the family's hi-fi separates with the Player, Equaliser and Analyser.
+
+- New name on the panel, window and program (`taw-library`).
+- The library database moves to the family's folder (`Timster's Audio Works\Library` on Windows, `~/.local/share/timsters-audio-works/library` on Linux). A Music Box library is moved there automatically the first time, with nothing rescanned. Panel settings start fresh.
+- `TAW_LIBRARY_DB` replaces `MUSIC_BOX_DB`.
+- The panel comes from the shared TAW-Panel crate. It looks the same.
+
 ## 0.1.0 – 2026-10-13
 
 The first version: stage 1, scan and report. Music Box only reads your music.

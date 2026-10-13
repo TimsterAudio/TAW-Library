@@ -107,15 +107,63 @@ pub struct Db {
 }
 
 impl Db {
-    /// Where the library lives: `%APPDATA%\Music Box` on Windows,
-    /// `~/.local/share/music-box` on Linux.
+    /// Where the library lives, in the family's folder:
+    /// `%APPDATA%\Timster's Audio Works\Library` on Windows,
+    /// `~/.local/share/timsters-audio-works/library` on Linux.
     pub fn default_path() -> PathBuf {
         let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+        Self::path_under(&base)
+    }
+
+    fn path_under(base: &Path) -> PathBuf {
+        if cfg!(windows) {
+            base.join("Timster's Audio Works")
+                .join("Library")
+                .join("library.db")
+        } else {
+            base.join("timsters-audio-works")
+                .join("library")
+                .join("library.db")
+        }
+    }
+
+    /// Where Music Box 0.1 kept the library.
+    fn old_path_under(base: &Path) -> PathBuf {
         if cfg!(windows) {
             base.join("Music Box").join("library.db")
         } else {
             base.join("music-box").join("library.db")
         }
+    }
+
+    /// Moves a library from where Music Box 0.1 kept it, if there's one and
+    /// nothing at the new place yet. Returns true if it moved one. Only the
+    /// database moves; music files are never touched.
+    pub fn move_old_library() -> std::io::Result<bool> {
+        let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+        Self::move_library(&Self::old_path_under(&base), &Self::path_under(&base))
+    }
+
+    fn move_library(old: &Path, new: &Path) -> std::io::Result<bool> {
+        if new.exists() || !old.exists() {
+            return Ok(false);
+        }
+        if let Some(dir) = new.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        // The database and SQLite's journal files beside it.
+        for suffix in ["", "-wal", "-shm"] {
+            let from = PathBuf::from(format!("{}{suffix}", old.display()));
+            let to = PathBuf::from(format!("{}{suffix}", new.display()));
+            if from.exists() && std::fs::rename(&from, &to).is_err() {
+                std::fs::copy(&from, &to)?;
+                std::fs::remove_file(&from)?;
+            }
+        }
+        if let Some(dir) = old.parent() {
+            let _ = std::fs::remove_dir(dir); // only if it's now empty
+        }
+        Ok(true)
     }
 
     pub fn open(path: &Path) -> Result<Db> {
@@ -454,6 +502,26 @@ mod tests {
             mount: mount.into(),
             system: false,
         }
+    }
+
+    #[test]
+    fn old_library_moves_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let old = Db::old_path_under(tmp.path());
+        let new = Db::path_under(tmp.path());
+        // Nothing to move.
+        assert!(!Db::move_library(&old, &new).unwrap());
+        {
+            let db = Db::open(&old).unwrap();
+            db.add_rule(RuleKind::Name, "Stems", "test").unwrap();
+        }
+        assert!(Db::move_library(&old, &new).unwrap());
+        assert!(!old.exists() && new.exists());
+        let db = Db::open(&new).unwrap();
+        assert!(db.rules().unwrap().iter().any(|r| r.pattern == "Stems"));
+        // A library already at the new place is never overwritten.
+        Db::open(&old).unwrap();
+        assert!(!Db::move_library(&old, &new).unwrap());
     }
 
     #[test]

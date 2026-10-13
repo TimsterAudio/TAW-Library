@@ -7,7 +7,7 @@ use lofty::probe::Probe;
 use lofty::tag::{Accessor, ItemKey, Tag};
 use std::path::Path;
 
-/// The fields Music Box cares about, plus the file's audio properties.
+/// The fields the Library cares about, plus the file's audio properties.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TrackInfo {
     pub title: Option<String>,

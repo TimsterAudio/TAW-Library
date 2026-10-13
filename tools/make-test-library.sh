@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds a deliberately messy test library in tools/fixtures/ (git-ignored),
-# for trying Music Box without your own music. Every track is silence, so
+# for trying the Library without your own music. Every track is silence, so
 # the files stay small. Needs ffmpeg with libmp3lame.
 #
 #   fixtures/Data/       the main "drive": tagged albums with every kind of gap

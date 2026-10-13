@@ -1,7 +1,7 @@
 //! The views chosen with the View keys: Library, What's Missing, and the
 //! two that come in later stages.
 
-use super::app::{AlbumKey, MusicBox, View};
+use super::app::{AlbumKey, LibraryApp, View};
 use super::parts::*;
 use super::theme::*;
 use super::widgets::*;
@@ -13,7 +13,7 @@ use mb_core::volumes;
 const ARTISTS_W: f32 = 240.0;
 const DETAIL_W: f32 = 410.0;
 
-impl MusicBox {
+impl LibraryApp {
     // ------------------------------------------------------------ library
 
     pub fn library_view(&mut self, ui: &mut Ui, main: Rect, th: &Theme) {
@@ -682,7 +682,7 @@ impl MusicBox {
     }
 
     /// Plays an album in the computer's default player, through a playlist
-    /// file. When Spool can take a playlist from Music Box, this goes there.
+    /// file. When the Player can take a playlist from the Library, this goes there.
     fn play(&mut self, a: &Album) {
         let mut m3u = String::from("#EXTM3U\n");
         let mut n = 0;
@@ -706,7 +706,7 @@ impl MusicBox {
             self.tell("That album's drive isn't connected.");
             return;
         }
-        let dir = std::env::temp_dir().join("music-box");
+        let dir = std::env::temp_dir().join("taw-library");
         let _ = std::fs::create_dir_all(&dir);
         let safe: String = format!("{} - {}", a.artist, a.title)
             .chars()
@@ -723,7 +723,7 @@ impl MusicBox {
             Ok(()) => {
                 open_path(&file);
                 self.touch("Play", a.title.clone());
-                self.tell("Playing in your default music player. Spool will take this over when it joins Music Box.");
+                self.tell("Playing in your default music player. The TAW Player will take this over when it's ready.");
             }
             Err(e) => self.tell(format!("Couldn't make the playlist: {e}")),
         }
@@ -802,7 +802,7 @@ impl MusicBox {
             y += 66.0;
         }
         let p = ui.painter();
-        let note = "The fields Music Box checks: artist, album artist, album, year, disc and track number, title, time and artwork. Every other tag in your files is kept as it is.";
+        let note = "The fields the Library checks: artist, album artist, album, year, disc and track number, title, time and artwork. Every other tag in your files is kept as it is.";
         let g = p.layout(
             note.into(),
             font(F_LEGEND, 11.5),
@@ -983,12 +983,12 @@ impl MusicBox {
         let (title, body) = if which == "Dupes" {
             (
                 "Duplicates come in stage 3",
-                "Music Box will find copies at three levels: identical files, the same audio with different tags, and the same recording in another format (by its audio fingerprint). It will suggest which copy to keep (lossless first, then the higher bitrate, then the more complete tags). Copies you don't keep go to a Review folder. Nothing is deleted.",
+                "The Library will find copies at three levels: identical files, the same audio with different tags, and the same recording in another format (by its audio fingerprint). It will suggest which copy to keep (lossless first, then the higher bitrate, then the more complete tags). Copies you don't keep go to a Review folder. Nothing is deleted.",
             )
         } else {
             (
                 "The organise plan comes in stage 4",
-                "Music Box will show your folders now, the plan, and the new Music folder side by side: {Album Artist}\\{Year} - {Album}\\{Disc}{Track} {Title}. Copy is the default and leaves your originals where they are. Each copy is checked against its original, and every step is logged so it can be undone. Nothing changes until you press Apply.",
+                "The Library will show your folders now, the plan, and the new Music folder side by side: {Album Artist}\\{Year} - {Album}\\{Disc}{Track} {Title}. Copy is the default and leaves your originals where they are. Each copy is checked against its original, and every step is logged so it can be undone. Nothing changes until you press Apply.",
             )
         };
         let p = ui.painter();
@@ -1013,7 +1013,7 @@ impl MusicBox {
 
 /// The album's artwork as a texture, asking the loader for it if needed.
 fn art_texture(
-    app: &mut MusicBox,
+    app: &mut LibraryApp,
     ctx: &egui::Context,
     a: &Album,
     size: u32,

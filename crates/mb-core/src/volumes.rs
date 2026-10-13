@@ -9,7 +9,7 @@ pub enum Kind {
     Fixed,
     Removable,
     Network,
-    /// A folder added by hand that isn't on a drive Music Box can see.
+    /// A folder added by hand that isn't on a drive the Library can see.
     Folder,
 }
 
@@ -69,7 +69,7 @@ pub fn join(mount: &Path, rel: &str) -> PathBuf {
     p
 }
 
-/// A volume for a folder that isn't on any drive Music Box can see, such as
+/// A volume for a folder that isn't on any drive the Library can see, such as
 /// a Windows network share that has no drive letter.
 pub fn folder_volume(path: &Path) -> Volume {
     let s = path.to_string_lossy();

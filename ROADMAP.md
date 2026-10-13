@@ -17,7 +17,7 @@
 ## Stage 3: tag writing
 - [ ] Edit the core fields (artist, album artist, album, year, disc, track, title, artwork)
 - [ ] Apply staged lookups
-- [ ] Every change logged, with undo; tags Music Box doesn't use are kept
+- [ ] Every change logged, with undo; tags the Library doesn't use are kept
 
 ## Stage 4: duplicates and the organise plan
 - [ ] Duplicates: identical files, same audio with other tags, same recording in another format
@@ -27,5 +27,5 @@
 - [ ] Copy (default) or move, each copy checked against its original, with undo
 
 ## Later
-- [ ] Hand albums and playlists to Spool
+- [ ] Hand albums and playlists to the TAW Player
 - [ ] The shared panel crate for the family (see docs/ECOSYSTEM.md)

@@ -3,14 +3,14 @@ members = ["crates/mb-core"]
 
 [workspace.package]
 # The release version for the whole project.
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [package]
-name = "music-box"
+name = "taw-library"
 version.workspace = true
 edition.workspace = true
-description = "Music Box: a native music library manager for Windows and Linux"
+description = "Timster's Audio Works Library (LB-001): a native music library manager for Windows and Linux"
 authors = ["Timster's Audio Works"]
 publish = false
 

@@ -1,4 +1,4 @@
-//! Music Box's library engine: drives, scanning, tags and the database.
+//! The Library's engine: drives, scanning, tags and the database.
 //! Nothing here touches the UI, and nothing here writes to music files.
 
 pub mod db;
@@ -8,7 +8,7 @@ pub mod scan;
 pub mod tags;
 pub mod volumes;
 
-/// File extensions Music Box treats as music (lower case).
+/// File extensions the Library treats as music (lower case).
 pub const AUDIO_EXTS: &[&str] = &[
     "mp3", "flac", "wav", "m4a", "aif", "aiff", "ogg", "opus", "ape", "wv", "mpc", "aac",
 ];

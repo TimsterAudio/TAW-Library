@@ -1262,7 +1262,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "mb-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "imagesize",
@@ -1316,19 +1316,6 @@ checksum = "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b"
 dependencies = [
  "num-traits",
  "pxfm",
-]
-
-[[package]]
-name = "music-box"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui",
- "image",
- "mb-core",
- "rfd",
- "serde",
- "taw-panel",
 ]
 
 [[package]]
@@ -2352,6 +2339,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "taw-library"
+version = "0.2.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "image",
+ "mb-core",
+ "rfd",
+ "serde",
+ "taw-panel",
 ]
 
 [[package]]

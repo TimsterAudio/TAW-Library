@@ -1,11 +1,11 @@
-# Music Box: working conventions
+# TAW Library: working conventions
 
-Music Box is a native music library manager by Timster's Audio Works, written in Rust with egui (via eframe) for the panel. Read `docs/ARCHITECTURE.md` before you change code, and `docs/DESIGN.md` before you change the panel. The panel follows Drone Box's design language, as EQ Box does. `docs/ECOSYSTEM.md` covers how it fits with Spool, EQ Box and SP-10.
+The Library (LB-001, formerly Music Box) is a native music library manager by Timster's Audio Works, written in Rust with egui (via eframe) for the panel. Read `docs/ARCHITECTURE.md` before you change code, and `docs/DESIGN.md` before you change the panel. The panel follows Drone Box's design language, as the Equaliser does. TAW-Panel's `FAMILY.md` covers how it fits with the Player, Equaliser and Analyser.
 
 ## Hard rules
 
 - **Native, not HTML.** No web views or browser shells.
-- **Never change a music file without a plan the user has reviewed.** Until stage 3, nothing writes to music files at all. When writing comes: copy is the default, every change is logged and can be undone, and tags Music Box doesn't use are kept.
+- **Never change a music file without a plan the user has reviewed.** Until stage 3, nothing writes to music files at all. When writing comes: copy is the default, every change is logged and can be undone, and tags the Library doesn't use are kept.
 - **Never delete a music file.** Duplicates go to a Review folder.
 - **No network requests unless Lookups is switched on.** Fonts and the icon are built into the binary.
 - **The library engine stays free of UI code.** Everything in `crates/mb-core` is plain Rust and unit tested.
