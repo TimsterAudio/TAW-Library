@@ -1012,12 +1012,8 @@ impl LibraryApp {
 
             hifi::drawer_heading(ui, t, "Library");
             for (id, label, what) in [
-                (
-                    "s-add",
-                    "Add folder",
-                    "Scan a folder that isn't a whole drive",
-                ),
-                ("s-exclude", "Exclude…", "Leave a folder out of the library"),
+                ("s-add", "Add folder", "Scan a folder"),
+                ("s-exclude", "Exclude…", "Leave a folder out"),
             ] {
                 let r = hifi::drawer_row(ui, t, what, 110.0);
                 if hifi::button(ui, r, Id::new(id), t, label, false).clicked() {

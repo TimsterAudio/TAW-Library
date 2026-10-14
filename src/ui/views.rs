@@ -102,7 +102,8 @@ impl LibraryApp {
                 );
                 right = n.left() - 8.0;
                 let mut name_w = right - row.left() - 12.0;
-                if a.merge_into.is_some() {
+                let merge = a.merge_into.as_ref().filter(|_| !self.s.simple);
+                if merge.is_some() {
                     name_w -= 56.0;
                 }
                 let nr = fit(
@@ -114,7 +115,7 @@ impl LibraryApp {
                     tk.text,
                     name_w,
                 );
-                if let Some(into) = &a.merge_into {
+                if let Some(into) = merge {
                     chip(
                         p,
                         Pos2::new(nr.right() + 6.0, row.center().y),
@@ -675,7 +676,7 @@ impl LibraryApp {
             );
             let resp = ui.interact(r, Id::new(("tile", i)), Sense::click());
             let p = ui.painter();
-            p.rect_filled(r.expand(1.0), CornerRadius::same(3), Color32::BLACK);
+            p.rect_filled(r.expand(1.0), CornerRadius::same(4), tk.line);
             p.rect_filled(r, CornerRadius::same(3), tk.well);
             if *m == cur {
                 p.rect_stroke(

@@ -29,3 +29,5 @@
 ## Later
 - [x] Hand albums and playlists to the TAW Player (albums; playlists when the Library has them)
 - [ ] The shared panel crate for the family (see docs/ECOSYSTEM.md)
+- [x] The TAW look (TAW-Panel `hifi`): Spool or Porcelain, Light, Dark or Automatic; Simple and Detailed; own title strip and window buttons
+- [ ] Resizable panes and columns (drag to resize, double-click to fit, widths remembered)

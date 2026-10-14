@@ -1,38 +1,21 @@
-# Panel design
+# Design
 
-The Library uses Drone Box's panel language, as the Equaliser does, so the family looks like one range of hardware. Drone Box's `docs/DESIGN.md` is the reference; the Equaliser's `docs/DESIGN.md` shows how a native egui panel applies it. This page covers what's different in Music Box.
+The Library's panel is the TAW hi-fi look shared with the Player, Equaliser and Analyser: TAW-Panel's `hifi` module. Spool's warm panels are the default (Light, Amber), tinted by any of Spool's seven colour themes; Porcelain is the alternative; each in Light, Dark or Automatic. The maker's badge ("Timster's Audio Works - Library"), the slanted logo (LIBRARY) and the model line (LB-001 · MUSIC LIBRARY MANAGER · V…) stay from the original panel. The reviewed mock-up is TAW-Panel's `docs/finishes-review.html` (Library, Simple and Detailed).
 
-## The one big difference: lists
+## Layout
 
-The Equaliser is a fixed panel of controls. The Library is mostly lists, so:
+- **Nameplate (top):** badge, logo and model line; window buttons at the top right; under them the family switcher (Library, Player, Equaliser, Analyser; apps not found are dimmed), Simple / Detailed and the gear for Settings. Drag the strip to move the window.
+- **Search and buttons:** search across artist and album names; **Scan drives** (Stop scan while scanning), and in Detailed **Add folder**, **Exclude…** and **Lookups: off**.
+- **Sidebar:** VIEW (Library, What's missing; Detailed adds Duplicates and Organise, marked "soon"); DRIVES (a green light when connected, an empty ring when not, the track count; Detailed adds what's scanned and when, a switch for scanning the whole drive, and × to forget an offline drive or remove a folder); Detailed adds LEFT OUT (excluded folders).
+- **Library view:** artists (a light for how complete their albums are; Detailed shows "Merge?" suggestions), their albums (artwork, year, title, tracks, time and format, and what each needs), and the album: big artwork, its title and facts, tags for the format and what's missing, **Play in Player** and **Show folder**, where it is, and its tracks.
+- **What's missing:** a tile for each kind of gap with its count, and the albums with it; click one to open it in the Library view.
+- **Footer:** track and album counts and the last scan (Detailed adds how complete the tags and artwork are, and the main formats); messages on the right, otherwise "Read only · your files are never changed".
 
-- **The chrome is fixed** (top strip, stripe, section frames, keys, red displays), and **the lists stretch** with the window. Below 1560 × 880 the whole panel scales down instead of squeezing, as the Equaliser's does.
-- **Lists sit in a recessed well** and use the legend face (Barlow Semi Condensed) in the legend colour. Long lists in display red are tiring to read, so red is kept for counts, readouts and things that are missing.
-- **Selection** is the orange focus colour: a tinted row with an orange edge.
+## Colours that mean something
 
-## Top strip, left to right
-
-Maker badge, logo (Michroma, slanted) and model line "LB-001 · MUSIC LIBRARY MANAGER"; the LED display; **Library** keys (Add in cream, Exclude in grey); the **Tags** and **Art** completeness ladders (green and amber); **View** (Library, Missing, Dupes, Organise: grey keys with LEDs); **Panel** (Black, Silver); **Online** (Lookups, yellow, with its LED off until stage 2); **Scan / Stop** (red, with its LED lit while scanning, in the Equaliser's Run / Stop place).
-
-## Lights and chips
-
-| | Meaning |
+| Colour | Means |
 |---|---|
-| Green light | Present and correct; a drive that's connected |
-| Amber light | Could be better: small artwork, mixed formats, an artist with some incomplete albums |
-| Red light | Missing |
-| Grey light | A drive that isn't connected |
-| Green outlined chip | Lossless format; "Complete" |
-| Grey outlined chip | Lossy format |
-| Red outlined chip | Something missing |
-| Amber filled chip | A suggestion ("Merge?") |
-
-## Keys
-
-| Colour | Used for |
-|---|---|
-| Red | Scan / Stop; Play (sends the album to a player) |
-| Yellow | Lookups (going online) |
-| Cream | Add, Folder, Look up, Edit |
-| Grey | Exclude, View, Panel |
-| Green lit key | A drive scanned whole |
+| Green light or tag | Connected; complete; lossless |
+| Amber | Worth fixing, not broken (small artwork, a suggestion) |
+| Red | Missing |
+| Empty ring | A drive that isn't connected |

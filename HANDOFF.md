@@ -7,17 +7,13 @@ Written 2026-10-14 when the family's work moved from one shared chat to a chat p
 - `main` is 0.2.0, released (Jupiter panel).
 - Branch `claude/focused-ritchie-veg4m9`, unmerged: one commit (`c0bc732`), the Play key hands the album to the TAW Player (`taw-player --play <m3u8>`) when it's found next to the Library, in a sibling `taw-player…` folder, or on the PATH; otherwise the default player as before.
 
-## In progress (2026-10-14, main chat)
+## The TAW look (2026-10-14)
 
-Moving the Library to the TAW look, following the Player (TAW-Player `src/app.rs` is the model: plate(), settings drawer, fit_to_window, frameless window). Steps, ticked as they're pushed to this branch:
+Done on this branch, on TAW-Panel 0.3.0 like the other three: nameplate, family switcher, Simple/Detailed and Settings drawer as in the Player; search and Scan along the top; a sidebar with the views and drives; the album detail as in the mock-up (big title, tags, Play in Player, Show folder). The list pieces are in `src/ui/look.rs`. Checked under Xvfb with the test library in Spool Light and Dark, Simple and Detailed, Library and What's missing, at 1360 × 820 and 1280 × 720.
 
-- [x] Pin TAW-Panel 0.3.0 (`1b8162d`), `hifi::install_fonts`, `Saved` gains `finish`, `simple`, `system_title_bar` (keep `panel` with `#[allow(dead_code)]`).
-- [x] Plate: nameplate, window buttons, family switcher (current 0 = Library), Simple/Detailed, gear; frameless window in main.rs.
-- [x] Views (`ui/views.rs`) redrawn with `hifi` tokens: sidebar, search, album list, album detail with Play in Player.
-- [x] Settings drawer: look, Lookups, library folders, window, keys.
-- [ ] Checkpoint `wip` builds; still to do: look at it under Xvfb and fix layout (album detail toward the mock-up: big title, chips, Play in Player + Show folder), then screenshots (test library: `tools/make-test-library.sh`), docs, CHANGELOG, push.
+Not done: resizable panes and columns (below), and a release (0.3.0: move Unreleased into a version section, bump Cargo.toml and README, merge).
 
 ## Next
 
-1. Move to the TAW look (TAW-Panel `hifi`, Spool Light Amber default); the reviewed mock-up is TAW-Panel `docs/finishes-review.html` (Library, Detailed and Simple).
+1. The user's review of the new look.
 2. Resizable panes and columns (the user asked for variable-width columns): drag a pane edge or column divider, double-click to fit, widths remembered per view, one flexible column (Title) takes the spare room, header right-click to show or hide columns. Build it in TAW-Panel so the Player can share it.

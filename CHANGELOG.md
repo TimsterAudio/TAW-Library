@@ -3,6 +3,11 @@
 ## Unreleased
 
 - Play sends the album to the TAW Player when it's installed, and to the default music player when it isn't.
+- The TAW look (TAW-Panel 0.3.0), as the Player, Equaliser and Analyser: Spool's look by default (Light, Amber) with Spool's seven colour themes, or Porcelain; Light, Dark or Automatic.
+- New layout: search across artists and albums along the top with Scan drives (and, in Detailed, Add folder, Exclude and Lookups); a sidebar with the views and drives; the album with big artwork, its title, what it needs, and Play in Player.
+- Simple view hides Duplicates, Organise, Exclude, Lookups, merge suggestions and the detail of what's missing; it keeps search, Scan and Play.
+- The family switcher starts the Player, Equaliser and Analyser when they're installed.
+- The Library draws its own title strip and window buttons; Settings has "Use the system title bar", Add folder and Exclude.
 
 ## 0.2.0 – 2026-10-13
 
