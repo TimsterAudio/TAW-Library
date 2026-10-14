@@ -5,12 +5,12 @@ use super::app::{AlbumKey, LibraryApp, View};
 use super::look::*;
 use crate::workers::ArtSource;
 use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
-use mb_core::library::{fmt_duration, is_lossless, Album, Art, Missing};
+use mb_core::library::{fmt_duration, Album, Art, Missing};
 use mb_core::volumes;
 use taw_panel::hifi::{self, Tokens};
 
-const ARTISTS_W: f32 = 240.0;
-const DETAIL_W: f32 = 410.0;
+const ARTISTS_W: f32 = 210.0;
+const DETAIL_W: f32 = 390.0;
 
 impl LibraryApp {
     // ------------------------------------------------------------ library
@@ -155,23 +155,21 @@ impl LibraryApp {
             None => "Albums".into(),
         };
         heading(ui.painter(), r.min, &title, tk);
-        let inner =
-            Rect::from_min_max(r.min + Vec2::new(10.0, 16.0), r.max - Vec2::new(10.0, 10.0));
+        let inner = Rect::from_min_max(r.min + Vec2::new(0.0, 20.0), r.max);
         well(ui.painter(), inner, tk);
         let Some(artist) = artist else { return };
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 28.0));
         let w = inner.width();
         let c_year = inner.left() + 96.0;
         let c_album = inner.left() + 108.0;
-        let c_fmt = inner.left() + (w * 0.55).max(300.0);
-        let c_needs = c_fmt + 92.0;
+        let c_needs = inner.left() + (w * 0.6).max(250.0);
+        let c_fmt = c_needs;
         header(
             ui.painter(),
             head,
             &[
                 (c_year, "Year", Align2::RIGHT_CENTER),
                 (c_album, "Album", Align2::LEFT_CENTER),
-                (c_fmt, "Format", Align2::LEFT_CENTER),
                 (c_needs, "Needs", Align2::LEFT_CENTER),
             ],
             tk,
@@ -238,42 +236,41 @@ impl LibraryApp {
                     c_fmt - c_album - 12.0,
                 );
                 let tracks = format!(
-                    "{} track{} · {}",
+                    "{} track{} · {} · {}",
                     a.tracks.len(),
                     if a.tracks.len() == 1 { "" } else { "s" },
-                    fmt_duration(a.duration_ms)
+                    fmt_duration(a.duration_ms),
+                    a.formats
+                        .iter()
+                        .take(2)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(" + ")
                 );
-                text(
+                fit(
                     p,
                     Pos2::new(c_album, y + 2.0),
                     Align2::LEFT_TOP,
                     &tracks,
-                    hifi::num(11.5),
+                    hifi::ui_font(11.5),
                     tk.dim,
+                    c_needs - c_album - 12.0,
                 );
-                let mut x = c_fmt;
-                for f in a.formats.iter().take(2) {
-                    let lossless = is_lossless(f, None)
-                        || a.tracks.iter().any(|&t| {
-                            self.lib.tracks[t].format == *f && self.lib.tracks[t].lossless()
-                        });
-                    x += chip(
-                        p,
-                        Pos2::new(x, y),
-                        f,
-                        if lossless { tk.ok } else { tk.dim },
-                        false,
-                    ) + 4.0;
-                }
                 if a.missing.is_empty() {
                     chip(p, Pos2::new(c_needs, y), "Complete", tk.ok, false);
+                } else if self.s.simple {
+                    chip(p, Pos2::new(c_needs, y), "Needs work", AMBER, false);
                 }
                 // Up to two lines of chips.
                 let (mut x, mut line) = (c_needs, 0);
-                let chips: Vec<Missing> = a.missing.iter().copied().collect();
+                let chips: Vec<Missing> = if self.s.simple {
+                    Vec::new()
+                } else {
+                    a.missing.iter().copied().collect()
+                };
                 let line_y = |l: i32| {
                     if chips.len() > 1 {
-                        y - 9.0 + l as f32 * 18.0
+                        y - 10.5 + l as f32 * 21.0
                     } else {
                         y
                     }
@@ -345,38 +342,36 @@ impl LibraryApp {
         let a = self.lib.albums[ai].clone();
         let ctx = ui.ctx().clone();
         let tex = art_texture(self, &ctx, &a, 320);
-        let art_r = Rect::from_min_size(r.min + Vec2::new(12.0, 20.0), Vec2::splat(156.0));
+        let art_r = Rect::from_min_size(r.min + Vec2::new(0.0, 22.0), Vec2::splat(150.0));
         let p = ui.painter();
         draw_art(p, art_r, tex.as_ref(), &a.art, 13.0, tk);
         if let Some((w, h)) = a.art.size() {
             let s = format!("{w} × {h}");
-            let g = p.layout_no_wrap(s.clone(), hifi::num(11.0), Color32::WHITE);
+            let g = p.layout_no_wrap(s.clone(), hifi::num(10.5), Color32::WHITE);
             let br = Rect::from_min_size(
                 art_r.left_bottom() + Vec2::new(6.0, -6.0 - g.size().y - 2.0),
                 g.size() + Vec2::new(8.0, 2.0),
             );
-            p.rect_filled(br, CornerRadius::same(2), Color32::from_black_alpha(160));
+            p.rect_filled(br, CornerRadius::same(4), Color32::from_black_alpha(150));
             p.galley(br.min + Vec2::new(4.0, 1.0), g, Color32::WHITE);
         }
 
-        // Fields, each with a light: green present, amber could be better,
-        // red missing.
+        // Who, what, and how complete it is.
         let ts: Vec<mb_core::library::Track> = a
             .tracks
             .iter()
             .map(|&i| self.lib.tracks[i].clone())
             .collect();
         let first = &ts[0];
-        let all = |f: &dyn Fn(&mb_core::library::Track) -> bool| ts.iter().all(f);
+        let lossless = first.lossless();
         let fmt = {
-            let lossless = first.lossless();
             let detail = if lossless {
                 match (first.bit_depth, first.sample_rate) {
-                    (Some(b), Some(sr)) => format!(" · {b}/{}", sr as f32 / 1000.0),
+                    (Some(b), Some(sr)) => format!(" {b}/{}", sr as f32 / 1000.0),
                     _ => String::new(),
                 }
             } else {
-                first.bitrate.map_or(String::new(), |b| format!(" · {b}k"))
+                first.bitrate.map_or(String::new(), |b| format!(" {b}k"))
             };
             if a.formats.len() > 1 {
                 a.formats.iter().cloned().collect::<Vec<_>>().join(" + ")
@@ -385,149 +380,121 @@ impl LibraryApp {
             }
         };
         let discs = ts.iter().filter_map(|t| t.disc).max();
-        let fields: Vec<(&str, String, Light)> = vec![
-            (
-                "Title",
-                a.title.clone(),
-                if a.untitled { Light::Bad } else { Light::Ok },
-            ),
-            (
-                "Artist",
-                first.artist.clone().unwrap_or_default(),
-                if all(&|t| t.artist.is_some()) {
-                    Light::Ok
-                } else {
-                    Light::Bad
-                },
-            ),
-            (
-                "Album artist",
-                if a.missing.contains(&Missing::AlbumArtist) {
-                    String::new()
-                } else {
-                    a.artist.clone()
-                },
-                if a.missing.contains(&Missing::AlbumArtist) {
-                    Light::Bad
-                } else {
-                    Light::Ok
-                },
-            ),
-            (
-                "Year",
-                a.year.map_or(String::new(), |y| y.to_string()),
-                if a.missing.contains(&Missing::Year) {
-                    Light::Bad
-                } else {
-                    Light::Ok
-                },
-            ),
-            (
-                "Disc",
-                discs.map_or("1".into(), |d| {
-                    format!("{d} disc{}", if d == 1 { "" } else { "s" })
-                }),
-                if a.missing.contains(&Missing::DiscNo) {
-                    Light::Bad
-                } else {
-                    Light::Ok
-                },
-            ),
-            (
-                "Tracks",
-                format!("{} · {}", a.tracks.len(), fmt_duration(a.duration_ms)),
-                if a.missing.contains(&Missing::TrackNo) {
-                    Light::Bad
-                } else {
-                    Light::Ok
-                },
-            ),
-            (
-                "Format",
-                fmt,
-                if a.formats.len() > 1 {
-                    Light::Warn
-                } else {
-                    Light::Ok
-                },
-            ),
-            (
-                "Artwork",
-                match &a.art {
-                    Art::None => String::new(),
-                    Art::Embedded { .. } => "Embedded".into(),
-                    Art::Folder { file, .. } => file.clone(),
-                },
-                if a.missing.contains(&Missing::Art) {
-                    Light::Bad
-                } else if a.missing.contains(&Missing::SmallArt) {
-                    Light::Warn
-                } else {
-                    Light::Ok
-                },
-            ),
-        ];
-        let fx = art_r.right() + 14.0;
-        for (i, (k, v, l)) in fields.iter().enumerate() {
-            let y = art_r.top() + 8.0 + i as f32 * 19.5;
-            light(p, Pos2::new(fx + 4.0, y), *l, tk);
-            text(
-                p,
-                Pos2::new(fx + 14.0, y),
-                Align2::LEFT_CENTER,
-                &k.to_uppercase(),
-                hifi::ui_font(10.5),
-                tk.dim,
-            );
-            if v.is_empty() || (*l == Light::Bad && *k != "Title" && *k != "Disc" && *k != "Tracks")
-            {
-                text(
-                    p,
-                    Pos2::new(fx + 104.0, y),
-                    Align2::LEFT_CENTER,
-                    "MISSING",
-                    hifi::num(12.0),
-                    BAD,
-                );
+        let simple = self.s.simple;
+        let fx = art_r.right() + 18.0;
+        let fw = r.right() - fx;
+        let p = ui.painter();
+        fit(
+            p,
+            Pos2::new(fx, art_r.top() + 2.0),
+            Align2::LEFT_TOP,
+            &format!("{} · album", a.artist),
+            hifi::ui_font(12.0),
+            tk.dim,
+            fw,
+        );
+        fit(
+            p,
+            Pos2::new(fx, art_r.top() + 20.0),
+            Align2::LEFT_TOP,
+            &a.title,
+            hifi::bold(22.0),
+            if a.untitled { tk.dim } else { tk.text },
+            fw,
+        );
+        let mut facts = Vec::new();
+        if let Some(y) = a.year {
+            facts.push(y.to_string());
+        }
+        facts.push(format!(
+            "{} track{}",
+            a.tracks.len(),
+            if a.tracks.len() == 1 { "" } else { "s" }
+        ));
+        facts.push(fmt_duration(a.duration_ms));
+        if let Some(d) = discs.filter(|&d| d > 1) {
+            facts.push(format!("{d} discs"));
+        }
+        fit(
+            p,
+            Pos2::new(fx, art_r.top() + 52.0),
+            Align2::LEFT_TOP,
+            &facts.join(" · "),
+            hifi::ui_font(13.5),
+            tk.dim,
+            fw,
+        );
+        // Tags: the format, then what's missing (or that nothing is).
+        let mut cx = fx;
+        let mut cy = art_r.top() + 88.0;
+        let mut chips: Vec<(String, Color32)> = Vec::new();
+        if simple {
+            chips.push(if a.missing.is_empty() {
+                ("Complete".into(), tk.ok)
             } else {
-                fit(
-                    p,
-                    Pos2::new(fx + 104.0, y),
-                    Align2::LEFT_CENTER,
-                    v,
-                    hifi::ui_font(13.0),
-                    tk.text,
-                    r.right() - fx - 116.0,
-                );
+                ("Needs a little work".into(), AMBER)
+            });
+        } else {
+            chips.push((fmt.clone(), if lossless { tk.ok } else { tk.dim }));
+            if a.missing.is_empty() {
+                chips.push(("Tags complete".into(), tk.ok));
             }
+            for m in &a.missing {
+                chips.push((
+                    m.title().to_string(),
+                    if m.is_warning() { AMBER } else { BAD },
+                ));
+            }
+        }
+        for (s, c) in &chips {
+            let w = chip_width(s);
+            if cx + w > r.right() && cx > fx {
+                cx = fx;
+                cy += 24.0;
+            }
+            if cy > art_r.bottom() - 46.0 {
+                break;
+            }
+            cx += chip(p, Pos2::new(cx, cy), s, *c, false) + 6.0;
         }
 
-        // Keys
-        let ky = art_r.bottom() + 26.0;
-        let k = |x: f32| Rect::from_min_size(Pos2::new(r.left() + x, ky), Vec2::new(54.0, 24.0));
+        // Play, and what else can be done with it.
         let folder = self.full_path(&a.volume, &a.dir);
-        if hifi::button(ui, k(14.0), Id::new("open-folder"), tk, "Folder", false).clicked() {
-            match &folder {
-                Some(f) => {
-                    open_path(f);
-                    self.touch("Open folder", a.title.clone());
-                }
-                None => self.tell("That album's drive isn't connected."),
+        let by = art_r.bottom() - 30.0;
+        let mut bx = fx;
+        let mut buttons = vec![
+            ("play", "Play in Player", true),
+            ("open-folder", "Show folder", false),
+        ];
+        if !simple {
+            buttons.push(("lookup", "Look up", false));
+            buttons.push(("edit", "Edit", false));
+        }
+        for (id, label, primary) in buttons {
+            let w = hifi::button_width(ui, label);
+            if bx + w > r.right() + 1.0 {
+                break;
             }
+            let br = Rect::from_min_size(Pos2::new(bx, by), Vec2::new(w, 30.0));
+            if hifi::button(ui, br, Id::new(id), tk, label, primary).clicked() {
+                match id {
+                    "play" => self.play(&a),
+                    "open-folder" => match &folder {
+                        Some(f) => {
+                            open_path(f);
+                            self.touch("Open folder", a.title.clone());
+                        }
+                        None => self.tell("That album's drive isn't connected."),
+                    },
+                    "lookup" => self.tell(
+                        "Looking albums up online comes in stage 2, when Lookups is turned on.",
+                    ),
+                    _ => self.tell("Editing tags comes in stage 3, with an undo log."),
+                }
+            }
+            bx = br.right() + 8.0;
         }
-        if hifi::button(ui, k(78.0), Id::new("lookup"), tk, "Look up", false).clicked() {
-            self.tell("Looking albums up online comes in stage 2, when Lookups is turned on.");
-        }
-        if hifi::button(ui, k(142.0), Id::new("edit"), tk, "Edit", false).clicked() {
-            self.tell("Editing tags comes in stage 3, with an undo log.");
-        }
-        let play_r = Rect::from_min_size(
-            Pos2::new(r.right() - 14.0 - 76.0, ky),
-            Vec2::new(76.0, 24.0),
-        );
-        if hifi::button(ui, play_r, Id::new("play"), tk, "Play", true).clicked() {
-            self.play(&a);
-        }
+        let ky = art_r.bottom() - 30.0;
 
         // Where it is
         let p = ui.painter();
@@ -537,20 +504,17 @@ impl LibraryApp {
             (Some(v), None) => format!("{} (offline) › {}", v.label, a.dir),
             (None, None) => a.dir.clone(),
         };
-        let g = p.layout(where_, hifi::ui_font(11.5), tk.dim, r.width() - 28.0);
+        let g = p.layout(where_, hifi::ui_font(11.5), tk.dim, r.width());
         let wy = ky + 46.0;
         let wh = g.size().y.min(32.0);
         p.with_clip_rect(Rect::from_min_size(
             Pos2::new(r.left(), wy),
             Vec2::new(r.width(), wh),
         ))
-        .galley(Pos2::new(r.left() + 14.0, wy), g, tk.dim);
+        .galley(Pos2::new(r.left(), wy), g, tk.dim);
 
         // Tracks
-        let inner = Rect::from_min_max(
-            Pos2::new(r.left() + 10.0, wy + wh + 10.0),
-            r.max - Vec2::new(10.0, 10.0),
-        );
+        let inner = Rect::from_min_max(Pos2::new(r.left(), wy + wh + 10.0), r.max);
         well(ui.painter(), inner, tk);
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 26.0));
         let mixed = a.formats.len() > 1;
@@ -785,10 +749,7 @@ impl LibraryApp {
             &format!("Albums · {}", cur.title()),
             tk,
         );
-        let inner = Rect::from_min_max(
-            lr.min + Vec2::new(10.0, 16.0),
-            lr.max - Vec2::new(10.0, 10.0),
-        );
+        let inner = Rect::from_min_max(lr.min + Vec2::new(0.0, 20.0), lr.max);
         well(ui.painter(), inner, tk);
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 28.0));
         let w = inner.width();

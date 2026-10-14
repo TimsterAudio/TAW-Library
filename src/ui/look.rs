@@ -88,14 +88,14 @@ pub fn light(p: &Painter, c: Pos2, l: Light, t: &Tokens) {
 /// A small rounded tag (a format, or something missing), outlined in its
 /// colour or filled with it. Returns its width.
 pub fn chip(p: &Painter, left_centre: Pos2, s: &str, c: Color32, filled: bool) -> f32 {
-    let g = p.layout_no_wrap(s.to_string(), hifi::ui_font(11.5), c);
+    let text_c = if filled { Color32::WHITE } else { c };
+    let g = p.layout_no_wrap(s.to_string(), hifi::ui_font(11.5), text_c);
     let r = Rect::from_min_size(
         Pos2::new(left_centre.x, left_centre.y - 10.0),
         Vec2::new(g.size().x + 16.0, 20.0),
     );
-    let text_c = if filled {
+    if filled {
         p.rect_filled(r, CornerRadius::same(10), c);
-        Color32::WHITE
     } else {
         p.rect_stroke(
             r,
@@ -103,8 +103,7 @@ pub fn chip(p: &Painter, left_centre: Pos2, s: &str, c: Color32, filled: bool) -
             Stroke::new(1.0, c.gamma_multiply(0.8)),
             egui::StrokeKind::Inside,
         );
-        c
-    };
+    }
     p.galley(
         Pos2::new(r.left() + 8.0, r.center().y - g.size().y / 2.0),
         g,
