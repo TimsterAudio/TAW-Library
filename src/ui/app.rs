@@ -1,30 +1,33 @@
-//! The Library panel: the top strip, the drives column, the footer, and
-//! the view that's chosen with the View keys.
+//! The Library panel, in the TAW look: the nameplate and family switcher,
+//! the search and library buttons, the sidebar (views and drives), the
+//! chosen view, the footer and the settings drawer.
 
-use super::parts::*;
-use super::theme::*;
-use super::widgets::*;
+use super::look::*;
 use crate::workers::{ArtLoader, DriveWatch, ScanRun};
-use egui::text::{LayoutJob, TextFormat};
-use egui::{Align2, CornerRadius, Id, Pos2, Rect, Stroke, StrokeKind, Ui, Vec2};
+use egui::{
+    Align2, CornerRadius, CursorIcon, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
+    ViewportCommand,
+};
 use mb_core::db::{Db, VolumeRow};
 use mb_core::excludes::{Rule, RuleKind};
-use mb_core::library::{Library, Missing};
+use mb_core::library::Library;
 use mb_core::volumes::{self, Kind, Volume};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::Relaxed;
-use taw_panel::frame::draw_panel_bg;
+use taw_panel::hifi::{self, Tokens};
+use taw_panel::theme::PanelKind;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const STORAGE_KEY: &str = "taw-library";
 
+pub const DEFAULT_SIZE: Vec2 = Vec2::new(1360.0, 820.0);
 /// Below this size the whole panel scales down instead of squeezing.
-pub const DESIGN_MIN: Vec2 = Vec2::new(1560.0, 880.0);
-
-/// The left column (drives, formats, excluded).
-pub const SIDE_W: f32 = 290.0;
-pub const TOP_ROW: f32 = 136.0;
+const MIN_DESIGN: Vec2 = Vec2::new(1240.0, 720.0);
+const PLATE_H: f32 = 96.0;
+const FOOT_H: f32 = 36.0;
+/// The sidebar (views and drives).
+pub const SIDE_W: f32 = 230.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum View {
@@ -63,12 +66,21 @@ impl AlbumKey {
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Saved {
+    /// The Jupiter panel before the TAW look. Kept so older settings load.
+    #[allow(dead_code)]
     pub panel: PanelKind,
     pub view: View,
     pub artist: Option<String>,
     pub album: Option<AlbumKey>,
     /// Index into `Missing::ALL`.
     pub missing: usize,
+    /// Finish, light or dark, and accent.
+    pub finish: hifi::Look,
+    /// Simple view: hides Duplicates, Organise, Exclude and Lookups until
+    /// they're wanted.
+    pub simple: bool,
+    /// Use the system's title bar instead of the Library's own.
+    pub system_title_bar: bool,
 }
 
 pub struct LibraryApp {
@@ -90,6 +102,9 @@ pub struct LibraryApp {
     pub notice: Option<(String, f64)>,
     /// Scroll the artist or album list to the selection on the next frame.
     pub scroll_to_selection: bool,
+    settings_open: bool,
+    /// Which family apps were found: Library, Player, Equaliser, Analyser.
+    installed: [bool; 4],
 }
 
 pub fn now() -> f64 {
@@ -102,7 +117,7 @@ pub fn now() -> f64 {
 
 impl LibraryApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        install_fonts(&cc.egui_ctx);
+        hifi::install_fonts(&cc.egui_ctx);
         let s: Saved = cc
             .storage
             .and_then(|st| eframe::get_value(st, STORAGE_KEY))
@@ -139,7 +154,14 @@ impl LibraryApp {
             touched: None,
             notice: None,
             scroll_to_selection: true,
+            settings_open: false,
+            installed: [true, false, false, false],
         };
+        if app.s.system_title_bar {
+            cc.egui_ctx
+                .send_viewport_cmd(ViewportCommand::Decorations(true));
+        }
+        app.refresh_family();
         if let Some(db) = &app.db {
             let _ = db.sync_volumes(&app.mounted, mb_core::now_secs());
         }
@@ -309,293 +331,6 @@ impl LibraryApp {
         }
     }
 
-    // ------------------------------------------------------------ frame
-
-    fn top_strip(&mut self, ui: &mut Ui, panel: Rect, th: &Theme) {
-        let o = panel.min.to_vec2();
-        let at = |x: f32, y: f32| Pos2::new(x, y) + o;
-        let right = panel.right();
-
-        // Maker wordmark, logo and model line.
-        {
-            let p = ui.painter();
-            let mut job = LayoutJob::default();
-            job.append(
-                "Timster's Audio Works - ",
-                0.0,
-                TextFormat {
-                    font_id: font(F_MAKER, 13.0),
-                    color: th.legend_dim,
-                    ..Default::default()
-                },
-            );
-            job.append(
-                "Library",
-                0.0,
-                TextFormat {
-                    font_id: font(F_MAKER_BOLD, 13.0),
-                    color: th.legend,
-                    ..Default::default()
-                },
-            );
-            let g = p.layout_job(job);
-            let r = Rect::from_min_size(at(22.0, 14.0), g.size() + Vec2::new(20.0, 10.0));
-            p.rect_stroke(
-                r,
-                CornerRadius::same(3),
-                Stroke::new(1.0, th.frame),
-                StrokeKind::Inside,
-            );
-            p.galley(r.min + Vec2::new(10.0, 5.0), g, th.legend);
-        }
-        slanted_text(
-            ui,
-            at(24.0, 50.0),
-            "LIBRARY",
-            font(F_LOGO, 30.0),
-            th.legend,
-            3.0,
-            12.0,
-        );
-        text(
-            ui.painter(),
-            at(22.0, 92.0),
-            Align2::LEFT_TOP,
-            &format!("LB-001 · MUSIC LIBRARY MANAGER · V{VERSION}"),
-            font(F_LEGEND, 10.0),
-            th.legend_dim,
-            2.4,
-        );
-
-        // LED display
-        let t = now();
-        let line1 = (
-            format!("{} tracks", thousands(self.lib.tracks.len() as u64)),
-            "Read only".to_string(),
-        );
-        let line2 = if let Some(run) = self.scan.as_ref().filter(|r| r.running()) {
-            (
-                format!("Scanning {}", run.progress.current.lock().unwrap()),
-                format!("{} files", thousands(run.progress.found.load(Relaxed))),
-            )
-        } else {
-            match &self.touched {
-                Some((n, v, when)) if t - when < 3.0 => (n.clone(), v.clone()),
-                _ => {
-                    let offline = self.volumes.iter().filter(|v| !self.online(v)).count();
-                    let n = self.volumes.len();
-                    let drives = if offline > 0 {
-                        format!("{n} drives · {offline} offline")
-                    } else {
-                        format!("{n} drives")
-                    };
-                    (
-                        if self.lib.tracks.is_empty() {
-                            "Press Scan to start".to_string()
-                        } else {
-                            drives
-                        },
-                        "Lookups off".to_string(),
-                    )
-                }
-            }
-        };
-        lcd(
-            ui.painter(),
-            Rect::from_min_size(at(292.0, 26.0), Vec2::new(318.0, 52.0)),
-            &[line1, line2],
-        );
-
-        // Library keys
-        legend(
-            ui.painter(),
-            at(700.0, 16.0),
-            Align2::CENTER_TOP,
-            "Library",
-            th,
-        );
-        let k = |x: f32| Rect::from_min_size(at(x, 44.0), Vec2::new(54.0, 24.0));
-        if key(ui, k(640.0), Id::new("add"), K_CREAM, None, "Add", th).clicked() {
-            self.add_folder();
-        }
-        if key(
-            ui,
-            k(704.0),
-            Id::new("exclude"),
-            K_GREY,
-            None,
-            "Exclude",
-            th,
-        )
-        .clicked()
-        {
-            self.add_exclude();
-        }
-
-        // Completeness meters
-        let p = ui.painter();
-        let mx = 790.0;
-        for (i, (name, share, col)) in [
-            ("Tags", self.lib.tags_complete, OK_GREEN),
-            ("Art", self.lib.art_complete, AMBER),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let y = 34.0 + i as f32 * 24.0;
-            legend(p, at(mx - 8.0, y + 7.0), Align2::RIGHT_CENTER, name, th);
-            ladder(
-                p,
-                Rect::from_min_size(at(mx, y), Vec2::new(116.0, 14.0)),
-                share,
-                col,
-            );
-            glow_text(
-                p,
-                at(mx + 124.0, y + 7.0),
-                Align2::LEFT_CENTER,
-                &format!("{:.0}%", share * 100.0),
-                font(F_MONO, 13.0),
-                LCD_INK,
-                0.5,
-            );
-        }
-        text(
-            p,
-            at(mx + 58.0, 84.0),
-            Align2::CENTER_TOP,
-            "COMPLETE",
-            font(F_LEGEND, 10.0),
-            th.legend_dim,
-            2.0,
-        );
-
-        // From the right: Scan / Stop, Lookups, Panel, View.
-        let scanning = self.scanning();
-        let scan_r = Rect::from_min_size(
-            Pos2::new(right - 22.0 - 96.0, panel.top() + 42.0),
-            Vec2::new(96.0, 30.0),
-        );
-        if key(
-            ui,
-            scan_r,
-            Id::new("scan"),
-            K_RED,
-            Some(scanning),
-            "Scan / Stop",
-            th,
-        )
-        .clicked()
-        {
-            if scanning {
-                if let Some(s) = &self.scan {
-                    s.stop();
-                }
-                self.touch("Scan", "Stopping");
-            } else {
-                self.start_scan(ui.ctx());
-            }
-        }
-
-        let small =
-            |x: f32| Rect::from_min_size(Pos2::new(x, panel.top() + 44.0), Vec2::new(50.0, 24.0));
-        let mut x = scan_r.left() - 26.0 - 50.0;
-        legend(
-            ui.painter(),
-            Pos2::new(x + 25.0, panel.top() + 16.0),
-            Align2::CENTER_TOP,
-            "Online",
-            th,
-        );
-        if key(
-            ui,
-            small(x),
-            Id::new("lookups"),
-            K_YELLOW,
-            Some(false),
-            "Lookups",
-            th,
-        )
-        .clicked()
-        {
-            self.touch("Lookups", "Stage 2");
-            self.tell("Online lookups (MusicBrainz and cover art) come in stage 2. Nothing is sent online.");
-        }
-
-        x -= 26.0 + 50.0 * 2.0 + 8.0;
-        legend(
-            ui.painter(),
-            Pos2::new(x + 54.0, panel.top() + 16.0),
-            Align2::CENTER_TOP,
-            "Panel",
-            th,
-        );
-        for (i, (kind, label)) in [(PanelKind::Black, "Black"), (PanelKind::Silver, "Silver")]
-            .into_iter()
-            .enumerate()
-        {
-            let r = small(x + i as f32 * 58.0);
-            if key(
-                ui,
-                r,
-                Id::new(("panel", i)),
-                K_GREY,
-                Some(self.s.panel == kind),
-                label,
-                th,
-            )
-            .clicked()
-            {
-                self.s.panel = kind;
-            }
-        }
-
-        let views = [
-            (View::Library, "Library"),
-            (View::Missing, "Missing"),
-            (View::Dupes, "Dupes"),
-            (View::Organise, "Organise"),
-        ];
-        x -= 26.0 + 58.0 * views.len() as f32;
-        legend(
-            ui.painter(),
-            Pos2::new(x + 58.0 * 2.0 - 4.0, panel.top() + 16.0),
-            Align2::CENTER_TOP,
-            "View",
-            th,
-        );
-        for (i, (v, label)) in views.into_iter().enumerate() {
-            let r = small(x + i as f32 * 58.0);
-            if key(
-                ui,
-                r,
-                Id::new(("view", i)),
-                K_GREY,
-                Some(self.s.view == v),
-                label,
-                th,
-            )
-            .clicked()
-            {
-                self.s.view = v;
-                self.scroll_to_selection = true;
-                let value = match v {
-                    View::Library => format!("{} albums", thousands(self.lib.albums.len() as u64)),
-                    View::Missing => {
-                        let n = self
-                            .lib
-                            .missing_albums
-                            .get(&Missing::Art)
-                            .map_or(0, Vec::len);
-                        format!("{} need art", thousands(n as u64))
-                    }
-                    View::Dupes | View::Organise => "Coming later".into(),
-                };
-                self.touch(label, value);
-            }
-        }
-    }
-
     fn add_folder(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("Add a folder to scan")
@@ -647,45 +382,258 @@ impl LibraryApp {
         self.reload();
     }
 
-    // ------------------------------------------------------------ side column
+    fn refresh_family(&mut self) {
+        for (i, prog) in [(1, "taw-player"), (2, "taw-equaliser"), (3, "taw-analyser")] {
+            self.installed[i] = super::views::find_app(prog).is_some();
+        }
+    }
 
-    fn side(&mut self, ui: &mut Ui, col: Rect, th: &Theme) {
+    fn start_family(&mut self, i: usize) {
+        let (prog, name) = match i {
+            1 => ("taw-player", "Player"),
+            2 => ("taw-equaliser", "Equaliser"),
+            _ => ("taw-analyser", "Analyser"),
+        };
+        match super::views::find_app(prog) {
+            Some(exe) => match std::process::Command::new(&exe)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            {
+                Ok(_) => self.tell(format!("Starting the {name}…")),
+                Err(e) => self.tell(format!("The {name} wouldn't start: {e}")),
+            },
+            None => self.tell(format!(
+                "The {name} isn't installed here (looked next to the Library and on the PATH)."
+            )),
+        }
+        self.refresh_family();
+    }
+
+    // ------------------------------------------------------------ top
+
+    fn plate(&mut self, ui: &mut Ui, screen: Rect, t: &Tokens) {
+        let plate = Rect::from_min_size(screen.min, Vec2::new(screen.width(), PLATE_H));
+        if !self.s.system_title_bar {
+            hifi::drag_to_move(ui, plate);
+        }
+        hifi::nameplate(
+            ui,
+            screen.min + Vec2::new(24.0, 14.0),
+            t,
+            "Library",
+            &format!("LB-001 · Music library manager · V{VERSION}"),
+        );
+        if !self.s.system_title_bar {
+            hifi::window_buttons(ui, Pos2::new(screen.right() - 10.0, screen.top() + 10.0), t);
+        }
+        let right = screen.right() - 24.0;
+        let row = screen.top() + 66.0;
+        let gear = Rect::from_min_size(Pos2::new(right - 30.0, row - 15.0), Vec2::splat(30.0));
+        if hifi::gear_button(ui, gear, Id::new("settings"), t, self.settings_open).clicked() {
+            self.settings_open = !self.settings_open;
+        }
+        let (seg, picked) = hifi::segmented(
+            ui,
+            Pos2::new(gear.left() - 12.0, row),
+            true,
+            Id::new("simple"),
+            t,
+            &["Simple", "Detailed"],
+            if self.s.simple { 0 } else { 1 },
+            hifi::Seg::Plain,
+            &[],
+            &[],
+        );
+        if let Some(i) = picked {
+            self.s.simple = i == 0;
+            if self.s.simple && matches!(self.s.view, View::Dupes | View::Organise) {
+                self.s.view = View::Library;
+            }
+        }
+        let (_, picked) =
+            hifi::family_switch(ui, Pos2::new(seg.left() - 14.0, row), t, 0, self.installed);
+        if let Some(i) = picked {
+            self.start_family(i);
+        }
+    }
+
+    /// Search, then Scan and (in Detailed) Add folder, Exclude and Lookups.
+    fn toolbar(&mut self, ui: &mut Ui, r: Rect, t: &Tokens) {
+        let y = r.center().y;
+        let mut x = r.right();
+        let scanning = self.scanning();
+        let mut buttons: Vec<(&str, &str, bool)> = vec![(
+            "scan",
+            if scanning { "Stop scan" } else { "Scan drives" },
+            true,
+        )];
+        if !self.s.simple {
+            buttons.push(("add", "Add folder", false));
+            buttons.push(("exclude", "Exclude…", false));
+            buttons.push(("lookups", "Lookups: off", false));
+        }
+        for (id, label, primary) in buttons {
+            let w = hifi::button_width(ui, label).max(96.0);
+            let br = Rect::from_min_size(Pos2::new(x - w, y - 16.0), Vec2::new(w, 32.0));
+            if hifi::button(ui, br, Id::new(id), t, label, primary).clicked() {
+                match id {
+                    "scan" if scanning => {
+                        if let Some(s) = &self.scan {
+                            s.stop();
+                        }
+                        self.touch("Scan", "Stopping");
+                    }
+                    "scan" => self.start_scan(ui.ctx()),
+                    "add" => self.add_folder(),
+                    "exclude" => self.add_exclude(),
+                    _ => self.tell(
+                        "Online lookups (MusicBrainz and cover art) come in stage 2. Nothing is sent online.",
+                    ),
+                }
+            }
+            x = br.left() - 10.0;
+        }
+
+        // The search field.
+        let field = Rect::from_min_max(Pos2::new(r.left(), y - 18.0), Pos2::new(x - 4.0, y + 18.0));
+        let p = ui.painter();
+        p.rect_filled(field, CornerRadius::same(8), t.well);
+        p.rect_stroke(
+            field,
+            CornerRadius::same(8),
+            Stroke::new(1.0, t.line),
+            StrokeKind::Inside,
+        );
+        let c = Pos2::new(field.left() + 18.0, y - 1.0);
+        p.circle_stroke(c, 5.0, Stroke::new(1.6, t.dim));
+        p.line_segment(
+            [c + Vec2::new(3.6, 3.6), c + Vec2::new(7.5, 7.5)],
+            Stroke::new(1.8, t.dim),
+        );
+        ui.put(
+            Rect::from_min_max(
+                Pos2::new(field.left() + 34.0, field.top() + 8.0),
+                Pos2::new(field.right() - 10.0, field.bottom() - 6.0),
+            ),
+            egui::TextEdit::singleline(&mut self.find)
+                .frame(egui::Frame::NONE)
+                .font(hifi::ui_font(14.0))
+                .text_color(t.text)
+                .hint_text(
+                    egui::RichText::new("Search artists and albums")
+                        .color(t.dim)
+                        .font(hifi::ui_font(14.0)),
+                ),
+        );
+    }
+
+    // ------------------------------------------------------------ sidebar
+
+    fn side(&mut self, ui: &mut Ui, col: Rect, t: &Tokens) {
         let now_s = mb_core::now_secs();
+        let simple = self.s.simple;
 
-        // Drives
+        // Views.
+        heading(ui.painter(), col.min, "View", t);
+        let mut y = col.top() + 22.0;
+        let incomplete = self
+            .lib
+            .albums
+            .iter()
+            .filter(|a| !a.missing.is_empty())
+            .count();
+        let mut views = vec![
+            (
+                View::Library,
+                "Library",
+                thousands(self.lib.tracks.len() as u64),
+            ),
+            (
+                View::Missing,
+                "What's missing",
+                thousands(incomplete as u64),
+            ),
+        ];
+        if !simple {
+            views.push((View::Dupes, "Duplicates", "soon".into()));
+            views.push((View::Organise, "Organise", "soon".into()));
+        }
+        for (v, label, n) in views {
+            let r = Rect::from_min_size(Pos2::new(col.left(), y), Vec2::new(col.width(), 32.0));
+            let resp = ui
+                .interact(r, Id::new(("view", label)), Sense::click())
+                .on_hover_cursor(CursorIcon::PointingHand);
+            let on = self.s.view == v;
+            let p = ui.painter();
+            if on {
+                p.rect_filled(r, CornerRadius::same(8), t.select);
+            } else if resp.hovered() {
+                p.rect_filled(r, CornerRadius::same(8), t.line_soft);
+            }
+            text(
+                p,
+                Pos2::new(r.left() + 10.0, r.center().y),
+                Align2::LEFT_CENTER,
+                label,
+                if on {
+                    hifi::semi(13.5)
+                } else {
+                    hifi::ui_font(13.5)
+                },
+                if on { t.accent } else { t.text },
+            );
+            text(
+                p,
+                Pos2::new(r.right() - 10.0, r.center().y),
+                Align2::RIGHT_CENTER,
+                &n,
+                hifi::num(11.5),
+                t.dim,
+            );
+            if resp.clicked() {
+                self.s.view = v;
+                self.scroll_to_selection = true;
+            }
+            y += 34.0;
+        }
+
+        // Drives (and, in Detailed, the folders scanned on each).
+        y += 14.0;
+        heading(ui.painter(), Pos2::new(col.left(), y), "Drives", t);
+        y += 22.0;
+        let excluded_h = if simple {
+            0.0
+        } else {
+            (col.bottom() - y) * 0.36
+        };
+        let inner = Rect::from_min_max(
+            Pos2::new(col.left(), y),
+            Pos2::new(col.right(), col.bottom() - excluded_h),
+        );
         // A drive is a hand-added folder when the Library can't see it as a
         // mounted drive (a network share with no drive letter, for one).
         let added = |v: &VolumeRow, mounted: &[Volume]| {
             matches!(v.kind, Kind::Folder | Kind::Network) && !mounted.iter().any(|m| m.id == v.id)
         };
-        // One row per drive, then one per folder on drives not scanned whole.
         let mut items: Vec<(usize, Option<String>)> = Vec::new();
         for (i, v) in self.volumes.iter().enumerate() {
             items.push((i, None));
-            if !v.scan && !added(v, &self.mounted) {
+            if !simple && !v.scan && !added(v, &self.mounted) {
                 for l in &v.locations {
                     items.push((i, Some(l.clone())));
                 }
             }
         }
-        let height: f32 = items
-            .iter()
-            .map(|(_, l)| if l.is_some() { 26.0 } else { 44.0 })
-            .sum();
-        let drives_h = (height.max(44.0) + 34.0).min(col.height() * 0.48);
-        let r = Rect::from_min_size(col.min, Vec2::new(col.width(), drives_h));
-        section(ui.painter(), r, "Drives", th, false);
-        let inner =
-            Rect::from_min_max(r.min + Vec2::new(10.0, 16.0), r.max - Vec2::new(10.0, 10.0));
-        well(ui.painter(), inner, th);
         if self.volumes.is_empty() {
             fit(
                 ui.painter(),
-                inner.left_top() + Vec2::new(10.0, 10.0),
+                inner.left_top() + Vec2::new(10.0, 4.0),
                 Align2::LEFT_TOP,
-                "No drives found. Use Add to choose a folder.",
-                font(F_LEGEND, 12.5),
-                th.legend_dim,
+                "No drives found. Use Add folder to choose one.",
+                hifi::ui_font(12.5),
+                t.dim,
                 inner.width() - 20.0,
             );
         }
@@ -704,33 +652,29 @@ impl LibraryApp {
                 ui.spacing_mut().item_spacing = Vec2::ZERO;
                 for (i, (vi, loc)) in items.iter().enumerate() {
                     let v = &self.volumes[*vi];
-                    let h = if loc.is_some() { 26.0 } else { 44.0 };
-                    let (r, _) = ui.allocate_exact_size(
-                        Vec2::new(ui.available_width(), h),
-                        egui::Sense::hover(),
-                    );
-                    let resp = ui.interact(r, Id::new(("drive", i)), egui::Sense::hover());
+                    let h = if loc.is_some() {
+                        24.0
+                    } else if simple {
+                        30.0
+                    } else {
+                        44.0
+                    };
+                    let (r, _) =
+                        ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::hover());
                     let online = mb_core::scan::is_online(v, &self.mounted);
-                    let p = ui.painter();
-                    row_bg(p, r, &resp, false, th);
                     let x = r.left() + 10.0;
                     let cross = |ui: &mut Ui, c: Pos2, id: (&str, usize), tip: &str| {
                         let xr = Rect::from_center_size(c, Vec2::splat(16.0));
                         let xresp = ui
-                            .interact(xr, Id::new(id), egui::Sense::click())
+                            .interact(xr, Id::new(id), Sense::click())
                             .on_hover_text(tip);
                         text(
                             ui.painter(),
                             xr.center(),
                             Align2::CENTER_CENTER,
                             "×",
-                            font(F_LEGEND_BOLD, 15.0),
-                            if xresp.hovered() {
-                                FOCUS
-                            } else {
-                                th.legend_dim
-                            },
-                            0.0,
+                            hifi::semi(15.0),
+                            if xresp.hovered() { t.accent } else { t.dim },
                         );
                         xresp.clicked()
                     };
@@ -741,17 +685,17 @@ impl LibraryApp {
                             loc.clone()
                         };
                         fit(
-                            p,
+                            ui.painter(),
                             Pos2::new(x + 14.0, r.center().y),
                             Align2::LEFT_CENTER,
                             &format!("› {label}"),
-                            font(F_LEGEND, 12.5),
-                            th.legend,
+                            hifi::ui_font(12.0),
+                            t.dim,
                             r.width() - 60.0,
                         );
                         if cross(
                             ui,
-                            Pos2::new(r.right() - 18.0, r.center().y),
+                            Pos2::new(r.right() - 14.0, r.center().y),
                             ("rm-loc", i),
                             "Stop scanning this folder",
                         ) {
@@ -759,11 +703,13 @@ impl LibraryApp {
                         }
                         continue;
                     }
+                    let top = r.top() + 15.0;
+                    let p = ui.painter();
                     light(
                         p,
-                        Pos2::new(x + 3.0, r.top() + 14.0),
+                        Pos2::new(x + 2.0, top),
                         if online { Light::Ok } else { Light::Off },
-                        th,
+                        t,
                     );
                     let is_added = added(v, &self.mounted);
                     let name = if is_added {
@@ -775,24 +721,35 @@ impl LibraryApp {
                             v.label
                         )
                     };
+                    let count_right = if simple {
+                        r.right() - 8.0
+                    } else {
+                        r.right() - 40.0
+                    };
+                    let n = text(
+                        p,
+                        Pos2::new(count_right, top),
+                        Align2::RIGHT_CENTER,
+                        &if online || v.tracks > 0 {
+                            thousands(v.tracks as u64)
+                        } else {
+                            "offline".into()
+                        },
+                        hifi::num(11.5),
+                        t.dim,
+                    );
                     fit(
                         p,
-                        Pos2::new(x + 14.0, r.top() + 14.0),
+                        Pos2::new(x + 14.0, top),
                         Align2::LEFT_CENTER,
                         &name,
-                        font(F_LEGEND_BOLD, 13.5),
-                        th.legend,
-                        r.width() - 110.0,
+                        hifi::ui_font(13.0),
+                        t.text,
+                        n.left() - x - 22.0,
                     );
-                    glow_text(
-                        p,
-                        Pos2::new(r.right() - 44.0, r.top() + 14.0),
-                        Align2::RIGHT_CENTER,
-                        &thousands(v.tracks as u64),
-                        font(F_MONO, 12.5),
-                        LCD_INK,
-                        0.3,
-                    );
+                    if simple {
+                        continue;
+                    }
                     let what = if is_added {
                         v.mount.to_string_lossy().into_owned()
                     } else if v.scan {
@@ -808,7 +765,7 @@ impl LibraryApp {
                     };
                     let state = if !online {
                         format!(
-                            "offline · last seen {} · entries kept",
+                            "offline · seen {}",
                             v.last_seen.map_or("never".into(), |s| ago(s, now_s))
                         )
                     } else {
@@ -817,37 +774,35 @@ impl LibraryApp {
                             None => "not scanned yet".into(),
                         }
                     };
-                    let sub = if is_added {
-                        format!("{state} · {what}")
-                    } else {
-                        format!("{} · {what} · {state}", v.kind.as_str())
-                    };
                     fit(
                         p,
-                        Pos2::new(x + 14.0, r.top() + 31.0),
+                        Pos2::new(x + 14.0, r.top() + 32.0),
                         Align2::LEFT_CENTER,
-                        &sub,
-                        font(F_LEGEND, 11.5),
-                        th.legend_dim,
-                        r.width() - 50.0,
+                        &format!("{what} · {state}"),
+                        hifi::ui_font(11.0),
+                        t.dim,
+                        r.width() - 40.0,
                     );
-                    if is_added {
-                        if cross(
-                            ui,
-                            Pos2::new(r.right() - 18.0, r.top() + 14.0),
-                            ("rm-added", i),
-                            "Remove this folder and forget what was found in it",
-                        ) {
+                    if is_added || !online {
+                        let (id, tip) = if is_added {
+                            (
+                                "rm-added",
+                                "Remove this folder and forget what was found in it",
+                            )
+                        } else {
+                            ("forget", "Forget this drive and what was found on it")
+                        };
+                        if cross(ui, Pos2::new(r.right() - 16.0, top), (id, i), tip) {
                             action = Some(Act::Forget(*vi));
                         }
                         continue;
                     }
-                    // Whole-drive switch: a lit key, green when the whole drive is scanned.
-                    let kr = Rect::from_min_size(
-                        Pos2::new(r.right() - 34.0, r.top() + 8.0),
-                        Vec2::new(24.0, 12.0),
+                    // Whole drive, or only the folders you add.
+                    let sw = Rect::from_min_size(
+                        Pos2::new(r.right() - 32.0, top - 7.0),
+                        Vec2::new(26.0, 14.0),
                     );
-                    if lit_key(ui, kr, Id::new(("whole", i)), ON_GREEN, v.scan, "", th)
+                    if hifi::switch(ui, sw, Id::new(("whole", i)), t, v.scan)
                         .on_hover_text(if v.scan {
                             "Scanning the whole drive. Click to scan only the folders you add."
                         } else {
@@ -856,16 +811,6 @@ impl LibraryApp {
                         .clicked()
                     {
                         action = Some(Act::Whole(*vi, !v.scan));
-                    }
-                    if !online
-                        && cross(
-                            ui,
-                            Pos2::new(r.right() - 22.0, r.top() + 31.0),
-                            ("forget", i),
-                            "Forget this drive and what was found on it",
-                        )
-                    {
-                        action = Some(Act::Forget(*vi));
                     }
                 }
             });
@@ -896,68 +841,20 @@ impl LibraryApp {
             self.reload();
         }
 
-        // Formats
-        let n_fmt = self.lib.formats.len().clamp(1, 8);
-        let fr = Rect::from_min_size(
-            Pos2::new(col.left(), r.bottom() + 18.0),
-            Vec2::new(col.width(), 30.0 + n_fmt as f32 * 20.0),
-        );
-        section(ui.painter(), fr, "Formats", th, false);
-        let p = ui.painter();
-        let max = self.lib.formats.first().map_or(1, |f| f.1).max(1);
-        if self.lib.formats.is_empty() {
-            text(
-                p,
-                fr.left_top() + Vec2::new(14.0, 22.0),
-                Align2::LEFT_TOP,
-                "Nothing scanned yet",
-                font(F_LEGEND, 12.0),
-                th.legend_dim,
-                0.0,
-            );
-        }
-        for (i, (f, n)) in self.lib.formats.iter().take(8).enumerate() {
-            let y = fr.top() + 26.0 + i as f32 * 20.0;
-            text(
-                p,
-                Pos2::new(fr.left() + 14.0, y),
-                Align2::LEFT_CENTER,
-                f,
-                font(F_LEGEND_BOLD, 11.5),
-                th.legend,
-                1.4,
-            );
-            let bar = Rect::from_min_size(
-                Pos2::new(fr.left() + 64.0, y - 4.0),
-                Vec2::new(fr.width() - 150.0, 8.0),
-            );
-            p.rect_filled(bar, 1, th.well);
-            p.rect_filled(
-                Rect::from_min_size(
-                    bar.min,
-                    Vec2::new(bar.width() * *n as f32 / max as f32, 8.0),
-                ),
-                1,
-                th.legend_dim,
-            );
-            glow_text(
-                p,
-                Pos2::new(fr.right() - 14.0, y),
-                Align2::RIGHT_CENTER,
-                &thousands(*n as u64),
-                font(F_MONO, 12.0),
-                LCD_INK,
-                0.3,
-            );
+        if simple {
+            return;
         }
 
-        // Excluded
-        let er = Rect::from_min_max(Pos2::new(col.left(), fr.bottom() + 18.0), col.max);
-        section(ui.painter(), er, "Excluded", th, false);
+        // Left out.
+        let er = Rect::from_min_max(
+            Pos2::new(col.left(), col.bottom() - excluded_h + 14.0),
+            col.max,
+        );
+        heading(ui.painter(), er.min, "Left out", t);
         let mut remove = None;
-        let mut y = er.top() + 20.0;
+        let mut y = er.top() + 22.0;
         for (i, rule) in self.rules.iter().enumerate() {
-            if y > er.bottom() - 90.0 {
+            if y > er.bottom() - 70.0 {
                 break;
             }
             let p = ui.painter();
@@ -967,16 +864,16 @@ impl LibraryApp {
             };
             fit(
                 p,
-                Pos2::new(er.left() + 14.0, y),
+                Pos2::new(er.left() + 10.0, y),
                 Align2::LEFT_TOP,
                 &pat,
-                font(F_LEGEND_BOLD, 12.5),
-                th.legend,
-                er.width() - 50.0,
+                hifi::ui_font(12.5),
+                t.text,
+                er.width() - 40.0,
             );
             let hits = if rule.hits > 0 {
                 format!(
-                    "{} · skipped {} folder{} last scan",
+                    "{} · skipped {} folder{}",
                     rule.note,
                     rule.hits,
                     if rule.hits == 1 { "" } else { "s" }
@@ -986,30 +883,25 @@ impl LibraryApp {
             };
             fit(
                 p,
-                Pos2::new(er.left() + 14.0, y + 16.0),
+                Pos2::new(er.left() + 10.0, y + 16.0),
                 Align2::LEFT_TOP,
                 &hits,
-                font(F_LEGEND, 11.5),
-                th.legend_dim,
-                er.width() - 40.0,
+                hifi::ui_font(11.0),
+                t.dim,
+                er.width() - 30.0,
             );
             let xr =
-                Rect::from_center_size(Pos2::new(er.right() - 18.0, y + 8.0), Vec2::splat(16.0));
+                Rect::from_center_size(Pos2::new(er.right() - 12.0, y + 8.0), Vec2::splat(16.0));
             let xresp = ui
-                .interact(xr, Id::new(("rule", i)), egui::Sense::click())
+                .interact(xr, Id::new(("rule", i)), Sense::click())
                 .on_hover_text("Stop leaving this out");
             text(
                 ui.painter(),
                 xr.center(),
                 Align2::CENTER_CENTER,
                 "×",
-                font(F_LEGEND_BOLD, 15.0),
-                if xresp.hovered() {
-                    FOCUS
-                } else {
-                    th.legend_dim
-                },
-                0.0,
+                hifi::semi(15.0),
+                if xresp.hovered() { t.accent } else { t.dim },
             );
             if xresp.clicked() {
                 remove = Some(rule.id);
@@ -1017,23 +909,17 @@ impl LibraryApp {
             y += 38.0;
         }
         let p = ui.painter();
-        let note = "Always left out: system folders, hidden folders and DAW project folders (their audio is stems and bounces). Exclude adds a folder.";
+        let note = "Always left out: system and hidden folders, and DAW project folders (their audio is stems and bounces).";
         let g = p.layout(
             note.to_string(),
-            font(F_LEGEND, 11.5),
-            th.legend_dim,
-            er.width() - 28.0,
+            hifi::ui_font(11.0),
+            t.dim,
+            er.width() - 14.0,
         );
-        p.galley(
-            Pos2::new(
-                er.left() + 14.0,
-                (y + 4.0)
-                    .max(er.bottom() - 70.0)
-                    .min(er.bottom() - g.size().y - 10.0),
-            ),
-            g,
-            th.legend_dim,
-        );
+        let gy = (y + 4.0).max(er.bottom() - g.size().y - 4.0);
+        if gy + g.size().y <= er.bottom() + 1.0 {
+            p.galley(Pos2::new(er.left() + 10.0, gy), g, t.dim);
+        }
         if let (Some(id), Some(db)) = (remove, &self.db) {
             let _ = db.remove_rule(id);
             self.tell("That folder will be scanned again from the next scan.");
@@ -1041,91 +927,219 @@ impl LibraryApp {
         }
     }
 
-    fn footer(&mut self, ui: &mut Ui, panel: Rect, th: &Theme) {
+    // ------------------------------------------------------------ footer
+
+    fn footer(&mut self, ui: &mut Ui, r: Rect, t: &Tokens) {
+        hifi::bar(ui.painter(), r, t);
+        let y = r.center().y;
+        let left = if let Some(run) = self.scan.as_ref().filter(|r| r.running()) {
+            format!(
+                "Scanning {} · {} files",
+                run.progress.current.lock().unwrap(),
+                thousands(run.progress.found.load(Relaxed))
+            )
+        } else {
+            let mut s = format!(
+                "{} tracks · {} albums",
+                thousands(self.lib.tracks.len() as u64),
+                thousands(self.lib.albums.len() as u64)
+            );
+            if let Some(last) = self.volumes.iter().filter_map(|v| v.last_scan).max() {
+                s += &format!(" · last scan {}", ago(last, mb_core::now_secs()));
+            }
+            if !self.s.simple && !self.lib.tracks.is_empty() {
+                s += &format!(
+                    " · tags {:.0}% and artwork {:.0}% complete",
+                    self.lib.tags_complete * 100.0,
+                    self.lib.art_complete * 100.0
+                );
+                let fmts: Vec<String> = self
+                    .lib
+                    .formats
+                    .iter()
+                    .take(3)
+                    .map(|(f, n)| format!("{f} {}", thousands(*n as u64)))
+                    .collect();
+                if !fmts.is_empty() {
+                    s += &format!(" · {}", fmts.join(", "));
+                }
+            }
+            s
+        };
         let p = ui.painter();
-        let y = panel.bottom() - 18.0;
-        text(
-            p,
-            Pos2::new(panel.left() + 22.0, y),
-            Align2::LEFT_CENTER,
-            "Click an artist or album to see it · Scan reads only what changed since last time · the Library doesn't change your files",
-            font(F_LEGEND, 12.0),
-            th.legend_dim,
-            0.0,
-        );
-        let msg = match (&self.db_error, &self.notice) {
-            (Some(e), _) => Some((e.clone(), LED)),
-            (None, Some((m, t))) if now() - t < 12.0 => Some((m.clone(), STRIPE[1])),
+        let msg = match (&self.db_error, &self.notice, &self.touched) {
+            (Some(e), _, _) => Some((e.clone(), BAD)),
+            (None, Some((m, at)), _) if now() - at < 12.0 => Some((m.clone(), t.text)),
+            (None, _, Some((n, v, at))) if now() - at < 3.0 => Some((format!("{n}: {v}"), t.dim)),
             _ => None,
         };
-        if let Some((m, col)) = msg {
-            fit(
-                p,
-                Pos2::new(panel.right() - 22.0, y),
-                Align2::RIGHT_CENTER,
-                &m,
-                font(F_LEGEND_BOLD, 12.5),
-                col,
-                panel.width() * 0.5,
-            );
+        let (right, right_c) =
+            msg.unwrap_or(("Read only · your files are never changed".into(), t.dim));
+        let rr = fit(
+            p,
+            Pos2::new(r.right() - 24.0, y),
+            Align2::RIGHT_CENTER,
+            &right,
+            hifi::ui_font(12.5),
+            right_c,
+            r.width() * 0.55,
+        );
+        fit(
+            p,
+            Pos2::new(r.left() + 24.0, y),
+            Align2::LEFT_CENTER,
+            &left,
+            hifi::ui_font(12.5),
+            t.dim,
+            rr.left() - r.left() - 48.0,
+        );
+        if self.notice.is_some() || self.touched.is_some() {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_secs(1));
         }
     }
-}
 
-pub(crate) fn set_visuals(ctx: &egui::Context, th: &Theme) {
-    let mut v = if th.silver {
-        egui::Visuals::light()
-    } else {
-        egui::Visuals::dark()
-    };
-    v.panel_fill = th.panel;
-    v.extreme_bg_color = LCD_BG;
-    v.selection.bg_fill = LCD_DIM;
-    v.selection.stroke = Stroke::new(1.0, LCD_INK);
-    v.text_cursor.stroke = Stroke::new(2.0, LCD_INK);
-    if ctx.global_style().visuals != v {
-        ctx.set_visuals(v);
+    // ------------------------------------------------------------ settings
+
+    fn settings(&mut self, ctx: &egui::Context, t: &Tokens) {
+        let mut open = self.settings_open;
+        let mut look = self.s.finish;
+        let mut system_bar = self.s.system_title_bar;
+        let mut act = None;
+        let db = self.db_path.display().to_string();
+        hifi::drawer(ctx, t, "Settings", &mut open, |ui| {
+            hifi::look_settings(ui, t, &mut look);
+
+            hifi::drawer_heading(ui, t, "Library");
+            for (id, label, what) in [
+                (
+                    "s-add",
+                    "Add folder",
+                    "Scan a folder that isn't a whole drive",
+                ),
+                ("s-exclude", "Exclude…", "Leave a folder out of the library"),
+            ] {
+                let r = hifi::drawer_row(ui, t, what, 110.0);
+                if hifi::button(ui, r, Id::new(id), t, label, false).clicked() {
+                    act = Some(id);
+                }
+            }
+            ui.label(
+                egui::RichText::new(format!("The library is kept in {db}"))
+                    .font(hifi::ui_font(12.0))
+                    .color(t.dim),
+            );
+
+            hifi::drawer_heading(ui, t, "Lookups");
+            ui.label(
+                egui::RichText::new(
+                    "Off. Looking albums up online (MusicBrainz and cover art) comes in stage 2, and only when you turn it on. Until then nothing is sent online.",
+                )
+                .font(hifi::ui_font(12.5))
+                .color(t.dim),
+            );
+
+            hifi::drawer_heading(ui, t, "Window");
+            let r = hifi::drawer_row(ui, t, "Use the system title bar", 32.0);
+            let r = Rect::from_min_size(r.min + Vec2::new(0.0, 4.0), Vec2::new(32.0, 18.0));
+            if hifi::switch(ui, r, Id::new("system-bar"), t, system_bar).clicked() {
+                system_bar = !system_bar;
+            }
+        });
+        self.settings_open = open;
+        self.s.finish = look;
+        match act {
+            Some("s-add") => self.add_folder(),
+            Some("s-exclude") => self.add_exclude(),
+            _ => {}
+        }
+        if system_bar != self.s.system_title_bar {
+            self.s.system_title_bar = system_bar;
+            ctx.send_viewport_cmd(ViewportCommand::Decorations(system_bar));
+        }
+    }
+
+    fn fit_to_window(&self, ctx: &egui::Context) {
+        let zoom = ctx.zoom_factor();
+        let screen = ctx.content_rect().size() * zoom;
+        let want = (screen.x / MIN_DESIGN.x)
+            .min(screen.y / MIN_DESIGN.y)
+            .clamp(0.5, 1.0);
+        if (want - zoom).abs() > 0.002 {
+            ctx.set_zoom_factor(want);
+            ctx.request_repaint();
+        }
     }
 }
 
 impl eframe::App for LibraryApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
-        // Never larger than designed: on a big window the lists get the room.
-        taw_panel::frame::fit_to_window(ui.ctx(), DESIGN_MIN, 1.0);
-        let th = Theme::panel(self.s.panel);
-        set_visuals(ui.ctx(), &th);
-        self.poll(&ui.ctx().clone());
+        let ctx = ui.ctx().clone();
+        self.fit_to_window(&ctx);
+        let t = Tokens::from_ctx(&ctx, &self.s.finish);
+        hifi::apply_visuals(&ctx, &t);
+        self.poll(&ctx);
 
-        let panel = ui.max_rect();
-        draw_panel_bg(ui.painter(), panel, &th);
-        self.top_strip(ui, panel, &th);
-        stripe(
-            ui.painter(),
-            Rect::from_min_size(
-                panel.min + Vec2::new(22.0, 110.0),
-                Vec2::new(panel.width() - 44.0, 6.0),
-            ),
+        let screen = ui.max_rect();
+        hifi::faceplate(ui.painter(), screen, &t);
+        self.plate(ui, screen, &t);
+        let tools = Rect::from_min_size(
+            Pos2::new(screen.left() + 24.0, screen.top() + PLATE_H + 4.0),
+            Vec2::new(screen.width() - 48.0, 40.0),
         );
+        self.toolbar(ui, tools, &t);
+        let foot = Rect::from_min_max(
+            Pos2::new(screen.left(), screen.bottom() - FOOT_H),
+            screen.max,
+        );
+        self.footer(ui, foot, &t);
+        ui.painter()
+            .rect_stroke(screen, 0, Stroke::new(1.0, t.edge), StrokeKind::Inside);
+
         let body = Rect::from_min_max(
-            panel.min + Vec2::new(22.0, TOP_ROW),
-            panel.max - Vec2::new(22.0, 40.0),
+            Pos2::new(screen.left() + 24.0, tools.bottom() + 18.0),
+            Pos2::new(screen.right() - 24.0, foot.top() - 16.0),
         );
         let side = Rect::from_min_size(body.min, Vec2::new(SIDE_W, body.height()));
-        self.side(ui, side, &th);
-        let main = Rect::from_min_max(Pos2::new(side.right() + 16.0, body.top()), body.max);
+        self.side(ui, side, &t);
+        let main = Rect::from_min_max(Pos2::new(side.right() + 20.0, body.top()), body.max);
         match self.s.view {
-            View::Library => self.library_view(ui, main, &th),
-            View::Missing => self.missing_view(ui, main, &th),
-            View::Dupes => self.later_view(ui, main, &th, "Dupes"),
-            View::Organise => self.later_view(ui, main, &th, "Organise"),
+            View::Library => self.library_view(ui, main, &t),
+            View::Missing => self.missing_view(ui, main, &t),
+            View::Dupes => self.later_view(ui, main, &t, "Dupes"),
+            View::Organise => self.later_view(ui, main, &t, "Organise"),
         }
-        self.footer(ui, panel, &th);
         self.scroll_to_selection = false;
+
+        self.settings(&ctx, &t);
+        if !self.s.system_title_bar {
+            hifi::resize_edges(ui, screen);
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, STORAGE_KEY, &self.s);
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        Tokens::new(&self.s.finish, false)
+            .face_bottom
+            .to_normalized_gamma_f32()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_from_the_jupiter_panel_still_load() {
+        let s: Saved =
+            serde_json::from_str(r#"{"panel": "Silver", "view": "Missing", "missing": 2}"#)
+                .unwrap();
+        assert_eq!(s.view, View::Missing);
+        assert_eq!(s.missing, 2);
+        assert!(!s.simple);
+        assert_eq!(s.finish, hifi::Look::default());
     }
 }

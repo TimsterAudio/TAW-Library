@@ -2,13 +2,12 @@
 //! two that come in later stages.
 
 use super::app::{AlbumKey, LibraryApp, View};
-use super::parts::*;
-use super::theme::*;
-use super::widgets::*;
+use super::look::*;
 use crate::workers::ArtSource;
 use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 use mb_core::library::{fmt_duration, is_lossless, Album, Art, Missing};
 use mb_core::volumes;
+use taw_panel::hifi::{self, Tokens};
 
 const ARTISTS_W: f32 = 240.0;
 const DETAIL_W: f32 = 410.0;
@@ -16,49 +15,33 @@ const DETAIL_W: f32 = 410.0;
 impl LibraryApp {
     // ------------------------------------------------------------ library
 
-    pub fn library_view(&mut self, ui: &mut Ui, main: Rect, th: &Theme) {
+    pub fn library_view(&mut self, ui: &mut Ui, main: Rect, tk: &Tokens) {
         let artists = Rect::from_min_size(main.min, Vec2::new(ARTISTS_W, main.height()));
         let detail = Rect::from_min_max(Pos2::new(main.right() - DETAIL_W, main.top()), main.max);
         let albums = Rect::from_min_max(
             Pos2::new(artists.right() + 14.0, main.top()),
             Pos2::new(detail.left() - 14.0, main.bottom()),
         );
-        self.artists_list(ui, artists, th);
-        self.albums_list(ui, albums, th);
-        self.album_detail(ui, detail, th);
+        self.artists_list(ui, artists, tk);
+        self.albums_list(ui, albums, tk);
+        self.album_detail(ui, detail, tk);
     }
 
-    fn artists_list(&mut self, ui: &mut Ui, r: Rect, th: &Theme) {
-        section(ui.painter(), r, "Artists", th, false);
-        let find = Rect::from_min_size(
-            r.min + Vec2::new(10.0, 16.0),
-            Vec2::new(r.width() - 20.0, 28.0),
-        );
-        ui.painter()
-            .rect_filled(find.expand(1.0), CornerRadius::same(2), Color32::BLACK);
-        ui.painter()
-            .rect_filled(find, CornerRadius::same(2), LCD_BG);
-        ui.put(
-            find.shrink2(Vec2::new(8.0, 4.0)),
-            egui::TextEdit::singleline(&mut self.find)
-                .frame(egui::Frame::NONE)
-                .font(font(F_MONO, 13.5))
-                .text_color(LCD_INK)
-                .hint_text(
-                    egui::RichText::new("FIND ARTIST")
-                        .color(LCD_DIM)
-                        .font(font(F_MONO, 13.5)),
-                ),
-        );
+    fn artists_list(&mut self, ui: &mut Ui, r: Rect, tk: &Tokens) {
+        heading(ui.painter(), r.min, "Artists", tk);
         let q = self.find.trim().to_lowercase();
         let list: Vec<usize> = (0..self.lib.artists.len())
-            .filter(|&i| q.is_empty() || self.lib.artists[i].name.to_lowercase().contains(&q))
+            .filter(|&i| {
+                let a = &self.lib.artists[i];
+                q.is_empty()
+                    || a.name.to_lowercase().contains(&q)
+                    || a.albums
+                        .iter()
+                        .any(|&x| self.lib.albums[x].title.to_lowercase().contains(&q))
+            })
             .collect();
-        let inner = Rect::from_min_max(
-            Pos2::new(r.left() + 10.0, find.bottom() + 8.0),
-            r.max - Vec2::new(10.0, 10.0),
-        );
-        well(ui.painter(), inner, th);
+        let inner = Rect::from_min_max(Pos2::new(r.left(), r.top() + 20.0), r.max);
+        well(ui.painter(), inner, tk);
         if list.is_empty() {
             let msg = if self.lib.artists.is_empty() {
                 "Nothing scanned yet"
@@ -70,9 +53,8 @@ impl LibraryApp {
                 inner.left_top() + Vec2::new(10.0, 10.0),
                 Align2::LEFT_TOP,
                 msg,
-                font(F_LEGEND, 12.5),
-                th.legend_dim,
-                0.0,
+                hifi::ui_font(12.5),
+                tk.dim,
             );
         }
         let sel = self.s.artist.clone();
@@ -95,7 +77,7 @@ impl LibraryApp {
                 let a = &self.lib.artists[list[i]];
                 let p = ui.painter();
                 let selected = Some(&a.name) == sel.as_ref();
-                row_bg(p, row, resp, selected, th);
+                row_bg(p, row, resp, selected, tk);
                 let mut right = row.right() - 12.0;
                 light(
                     p,
@@ -107,7 +89,7 @@ impl LibraryApp {
                     } else {
                         Light::Warn
                     },
-                    th,
+                    tk,
                 );
                 right -= 14.0;
                 let n = text(
@@ -115,9 +97,8 @@ impl LibraryApp {
                     Pos2::new(right, row.center().y),
                     Align2::RIGHT_CENTER,
                     &a.albums.len().to_string(),
-                    font(F_MONO, 12.0),
-                    th.legend_dim,
-                    0.0,
+                    hifi::num(12.0),
+                    tk.dim,
                 );
                 right = n.left() - 8.0;
                 let mut name_w = right - row.left() - 12.0;
@@ -129,8 +110,8 @@ impl LibraryApp {
                     Pos2::new(row.left() + 10.0, row.center().y),
                     Align2::LEFT_CENTER,
                     &a.name,
-                    font(F_LEGEND, 13.5),
-                    th.legend,
+                    hifi::ui_font(13.5),
+                    tk.text,
                     name_w,
                 );
                 if let Some(into) = &a.merge_into {
@@ -162,7 +143,7 @@ impl LibraryApp {
         }
     }
 
-    fn albums_list(&mut self, ui: &mut Ui, r: Rect, th: &Theme) {
+    fn albums_list(&mut self, ui: &mut Ui, r: Rect, tk: &Tokens) {
         let artist = self
             .s
             .artist
@@ -173,10 +154,10 @@ impl LibraryApp {
             Some(a) => format!("Albums · {}", a.name),
             None => "Albums".into(),
         };
-        section(ui.painter(), r, &title, th, false);
+        heading(ui.painter(), r.min, &title, tk);
         let inner =
             Rect::from_min_max(r.min + Vec2::new(10.0, 16.0), r.max - Vec2::new(10.0, 10.0));
-        well(ui.painter(), inner, th);
+        well(ui.painter(), inner, tk);
         let Some(artist) = artist else { return };
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 28.0));
         let w = inner.width();
@@ -193,7 +174,7 @@ impl LibraryApp {
                 (c_fmt, "Format", Align2::LEFT_CENTER),
                 (c_needs, "Needs", Align2::LEFT_CENTER),
             ],
-            th,
+            tk,
         );
         let list = Rect::from_min_max(Pos2::new(inner.left(), head.bottom() + 1.0), inner.max);
         let sel = self.s.album.clone();
@@ -219,14 +200,14 @@ impl LibraryApp {
                 let ai = artist.albums[i];
                 let a = &self.lib.albums[ai].clone();
                 let selected = sel.as_ref().is_some_and(|k| k.matches(a));
-                row_bg(ui.painter(), row, resp, selected, th);
+                row_bg(ui.painter(), row, resp, selected, tk);
                 let thumb = Rect::from_min_size(
                     Pos2::new(row.left() + 10.0, row.center().y - 19.0),
                     Vec2::splat(38.0),
                 );
                 let tex = art_texture(self, &ctx, a, 96);
                 let p = ui.painter();
-                draw_art(p, thumb, tex.as_ref(), &a.art, 9.0);
+                draw_art(p, thumb, tex.as_ref(), &a.art, 9.0, tk);
                 let y = row.center().y;
                 if a.missing.contains(&Missing::Year) && a.year.is_none() {
                     text(
@@ -234,9 +215,8 @@ impl LibraryApp {
                         Pos2::new(c_year, y),
                         Align2::RIGHT_CENTER,
                         "----",
-                        font(F_MONO, 13.0),
-                        LED,
-                        0.0,
+                        hifi::num(13.0),
+                        BAD,
                     );
                 } else if let Some(yr) = a.year {
                     text(
@@ -244,9 +224,8 @@ impl LibraryApp {
                         Pos2::new(c_year, y),
                         Align2::RIGHT_CENTER,
                         &yr.to_string(),
-                        font(F_MONO, 13.0),
-                        th.legend,
-                        0.0,
+                        hifi::num(13.0),
+                        tk.text,
                     );
                 }
                 fit(
@@ -254,8 +233,8 @@ impl LibraryApp {
                     Pos2::new(c_album, y - 1.0),
                     Align2::LEFT_BOTTOM,
                     &a.title,
-                    font(F_LEGEND, 13.5),
-                    if a.untitled { th.legend_dim } else { th.legend },
+                    hifi::ui_font(13.5),
+                    if a.untitled { tk.dim } else { tk.text },
                     c_fmt - c_album - 12.0,
                 );
                 let tracks = format!(
@@ -269,9 +248,8 @@ impl LibraryApp {
                     Pos2::new(c_album, y + 2.0),
                     Align2::LEFT_TOP,
                     &tracks,
-                    font(F_MONO, 11.5),
-                    th.legend_dim,
-                    0.0,
+                    hifi::num(11.5),
+                    tk.dim,
                 );
                 let mut x = c_fmt;
                 for f in a.formats.iter().take(2) {
@@ -283,12 +261,12 @@ impl LibraryApp {
                         p,
                         Pos2::new(x, y),
                         f,
-                        if lossless { ON_GREEN } else { th.legend_dim },
+                        if lossless { tk.ok } else { tk.dim },
                         false,
                     ) + 4.0;
                 }
                 if a.missing.is_empty() {
-                    chip(p, Pos2::new(c_needs, y), "Complete", ON_GREEN, false);
+                    chip(p, Pos2::new(c_needs, y), "Complete", tk.ok, false);
                 }
                 // Up to two lines of chips.
                 let (mut x, mut line) = (c_needs, 0);
@@ -309,9 +287,8 @@ impl LibraryApp {
                                 Pos2::new(x, line_y(1)),
                                 Align2::LEFT_CENTER,
                                 "…",
-                                font(F_LEGEND_BOLD, 13.0),
-                                LED,
-                                0.0,
+                                hifi::semi(13.0),
+                                BAD,
                             );
                             break;
                         }
@@ -322,7 +299,7 @@ impl LibraryApp {
                         p,
                         Pos2::new(x, line_y(line)),
                         m.chip(),
-                        if m.is_warning() { AMBER } else { LED },
+                        if m.is_warning() { AMBER } else { BAD },
                         false,
                     ) + 4.0;
                 }
@@ -352,17 +329,16 @@ impl LibraryApp {
             .find(|&i| k.matches(&self.lib.albums[i]))
     }
 
-    fn album_detail(&mut self, ui: &mut Ui, r: Rect, th: &Theme) {
-        section(ui.painter(), r, "Album", th, false);
+    fn album_detail(&mut self, ui: &mut Ui, r: Rect, tk: &Tokens) {
+        heading(ui.painter(), r.min, "Album", tk);
         let Some(ai) = self.selected_album() else {
             text(
                 ui.painter(),
                 r.left_top() + Vec2::new(14.0, 24.0),
                 Align2::LEFT_TOP,
                 "Choose an album.",
-                font(F_LEGEND, 13.0),
-                th.legend_dim,
-                0.0,
+                hifi::ui_font(13.0),
+                tk.dim,
             );
             return;
         };
@@ -371,10 +347,10 @@ impl LibraryApp {
         let tex = art_texture(self, &ctx, &a, 320);
         let art_r = Rect::from_min_size(r.min + Vec2::new(12.0, 20.0), Vec2::splat(156.0));
         let p = ui.painter();
-        draw_art(p, art_r, tex.as_ref(), &a.art, 13.0);
+        draw_art(p, art_r, tex.as_ref(), &a.art, 13.0, tk);
         if let Some((w, h)) = a.art.size() {
             let s = format!("{w} × {h}");
-            let g = p.layout_no_wrap(s.clone(), font(F_MONO, 11.0), Color32::WHITE);
+            let g = p.layout_no_wrap(s.clone(), hifi::num(11.0), Color32::WHITE);
             let br = Rect::from_min_size(
                 art_r.left_bottom() + Vec2::new(6.0, -6.0 - g.size().y - 2.0),
                 g.size() + Vec2::new(8.0, 2.0),
@@ -494,26 +470,24 @@ impl LibraryApp {
         let fx = art_r.right() + 14.0;
         for (i, (k, v, l)) in fields.iter().enumerate() {
             let y = art_r.top() + 8.0 + i as f32 * 19.5;
-            light(p, Pos2::new(fx + 4.0, y), *l, th);
+            light(p, Pos2::new(fx + 4.0, y), *l, tk);
             text(
                 p,
                 Pos2::new(fx + 14.0, y),
                 Align2::LEFT_CENTER,
                 &k.to_uppercase(),
-                font(F_LEGEND, 10.5),
-                th.legend_dim,
-                1.3,
+                hifi::ui_font(10.5),
+                tk.dim,
             );
             if v.is_empty() || (*l == Light::Bad && *k != "Title" && *k != "Disc" && *k != "Tracks")
             {
-                glow_text(
+                text(
                     p,
                     Pos2::new(fx + 104.0, y),
                     Align2::LEFT_CENTER,
                     "MISSING",
-                    font(F_MONO, 12.0),
-                    LED,
-                    0.3,
+                    hifi::num(12.0),
+                    BAD,
                 );
             } else {
                 fit(
@@ -521,8 +495,8 @@ impl LibraryApp {
                     Pos2::new(fx + 104.0, y),
                     Align2::LEFT_CENTER,
                     v,
-                    font(F_LEGEND, 13.0),
-                    th.legend,
+                    hifi::ui_font(13.0),
+                    tk.text,
                     r.right() - fx - 116.0,
                 );
             }
@@ -532,17 +506,7 @@ impl LibraryApp {
         let ky = art_r.bottom() + 26.0;
         let k = |x: f32| Rect::from_min_size(Pos2::new(r.left() + x, ky), Vec2::new(54.0, 24.0));
         let folder = self.full_path(&a.volume, &a.dir);
-        if key(
-            ui,
-            k(14.0),
-            Id::new("open-folder"),
-            K_CREAM,
-            None,
-            "Folder",
-            th,
-        )
-        .clicked()
-        {
+        if hifi::button(ui, k(14.0), Id::new("open-folder"), tk, "Folder", false).clicked() {
             match &folder {
                 Some(f) => {
                     open_path(f);
@@ -551,17 +515,17 @@ impl LibraryApp {
                 None => self.tell("That album's drive isn't connected."),
             }
         }
-        if key(ui, k(78.0), Id::new("lookup"), K_CREAM, None, "Look up", th).clicked() {
+        if hifi::button(ui, k(78.0), Id::new("lookup"), tk, "Look up", false).clicked() {
             self.tell("Looking albums up online comes in stage 2, when Lookups is turned on.");
         }
-        if key(ui, k(142.0), Id::new("edit"), K_CREAM, None, "Edit", th).clicked() {
+        if hifi::button(ui, k(142.0), Id::new("edit"), tk, "Edit", false).clicked() {
             self.tell("Editing tags comes in stage 3, with an undo log.");
         }
         let play_r = Rect::from_min_size(
             Pos2::new(r.right() - 14.0 - 76.0, ky),
             Vec2::new(76.0, 24.0),
         );
-        if key(ui, play_r, Id::new("play"), K_RED, None, "Play", th).clicked() {
+        if hifi::button(ui, play_r, Id::new("play"), tk, "Play", true).clicked() {
             self.play(&a);
         }
 
@@ -573,26 +537,21 @@ impl LibraryApp {
             (Some(v), None) => format!("{} (offline) › {}", v.label, a.dir),
             (None, None) => a.dir.clone(),
         };
-        let g = p.layout(
-            where_,
-            font(F_LEGEND, 11.5),
-            th.legend_dim,
-            r.width() - 28.0,
-        );
+        let g = p.layout(where_, hifi::ui_font(11.5), tk.dim, r.width() - 28.0);
         let wy = ky + 46.0;
         let wh = g.size().y.min(32.0);
         p.with_clip_rect(Rect::from_min_size(
             Pos2::new(r.left(), wy),
             Vec2::new(r.width(), wh),
         ))
-        .galley(Pos2::new(r.left() + 14.0, wy), g, th.legend_dim);
+        .galley(Pos2::new(r.left() + 14.0, wy), g, tk.dim);
 
         // Tracks
         let inner = Rect::from_min_max(
             Pos2::new(r.left() + 10.0, wy + wh + 10.0),
             r.max - Vec2::new(10.0, 10.0),
         );
-        well(ui.painter(), inner, th);
+        well(ui.painter(), inner, tk);
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 26.0));
         let mixed = a.formats.len() > 1;
         header(
@@ -603,7 +562,7 @@ impl LibraryApp {
                 (inner.left() + 46.0, "Title", Align2::LEFT_CENTER),
                 (inner.right() - 12.0, "Time", Align2::RIGHT_CENTER),
             ],
-            th,
+            tk,
         );
         let list = Rect::from_min_max(Pos2::new(inner.left(), head.bottom() + 1.0), inner.max);
         let multi_disc = discs.unwrap_or(1) > 1;
@@ -617,7 +576,7 @@ impl LibraryApp {
             |ui, i, row, resp| {
                 let t = &ts[i];
                 let p = ui.painter();
-                row_bg(p, row, resp, false, th);
+                row_bg(p, row, resp, false, tk);
                 let y = row.center().y;
                 let num = match (t.track_no, multi_disc) {
                     (Some(n), true) => format!("{}.{n:02}", t.disc.unwrap_or(1)),
@@ -629,9 +588,8 @@ impl LibraryApp {
                     Pos2::new(row.left() + 34.0, y),
                     Align2::RIGHT_CENTER,
                     &num,
-                    font(F_MONO, 12.5),
-                    if t.track_no.is_some() { th.legend } else { LED },
-                    0.0,
+                    hifi::num(12.5),
+                    if t.track_no.is_some() { tk.text } else { BAD },
                 );
                 let title = t.title.clone().unwrap_or_else(|| t.file_name().to_string());
                 let mut tw = row.width() - 120.0;
@@ -643,12 +601,8 @@ impl LibraryApp {
                     Pos2::new(row.left() + 46.0, y),
                     Align2::LEFT_CENTER,
                     &title,
-                    font(F_LEGEND, 13.0),
-                    if t.title.is_some() {
-                        th.legend
-                    } else {
-                        th.legend_dim
-                    },
+                    hifi::ui_font(13.0),
+                    if t.title.is_some() { tk.text } else { tk.dim },
                     tw,
                 );
                 text(
@@ -656,20 +610,15 @@ impl LibraryApp {
                     Pos2::new(row.right() - 12.0, y),
                     Align2::RIGHT_CENTER,
                     &fmt_duration(t.duration_ms),
-                    font(F_MONO, 12.5),
-                    th.legend,
-                    0.0,
+                    hifi::num(12.5),
+                    tk.text,
                 );
                 if mixed {
                     chip(
                         p,
                         Pos2::new(row.right() - 100.0, y),
                         &t.format,
-                        if t.lossless() {
-                            ON_GREEN
-                        } else {
-                            th.legend_dim
-                        },
+                        if t.lossless() { tk.ok } else { tk.dim },
                         false,
                     );
                 }
@@ -722,7 +671,7 @@ impl LibraryApp {
         match std::fs::write(&file, m3u) {
             Ok(()) => {
                 self.touch("Play", a.title.clone());
-                let started = find_player().map(|exe| {
+                let started = find_app("taw-player").map(|exe| {
                     std::process::Command::new(&exe)
                         .arg("--play")
                         .arg(&file)
@@ -750,9 +699,9 @@ impl LibraryApp {
 
     // ------------------------------------------------------------ missing
 
-    pub fn missing_view(&mut self, ui: &mut Ui, main: Rect, th: &Theme) {
+    pub fn missing_view(&mut self, ui: &mut Ui, main: Rect, tk: &Tokens) {
         let tiles = Rect::from_min_size(main.min, Vec2::new(270.0, main.height()));
-        section(ui.painter(), tiles, "What's missing", th, false);
+        heading(ui.painter(), tiles.min, "What's missing", tk);
         let cur = Missing::ALL[self.s.missing.min(Missing::ALL.len() - 1)];
         let mut y = tiles.top() + 18.0;
         for (i, m) in Missing::ALL.iter().enumerate() {
@@ -763,40 +712,38 @@ impl LibraryApp {
             let resp = ui.interact(r, Id::new(("tile", i)), Sense::click());
             let p = ui.painter();
             p.rect_filled(r.expand(1.0), CornerRadius::same(3), Color32::BLACK);
-            p.rect_filled(r, CornerRadius::same(3), LCD_BG);
+            p.rect_filled(r, CornerRadius::same(3), tk.well);
             if *m == cur {
                 p.rect_stroke(
                     r,
                     CornerRadius::same(3),
-                    Stroke::new(1.5, FOCUS),
+                    Stroke::new(1.5, tk.accent),
                     StrokeKind::Inside,
                 );
             } else if resp.hovered() {
                 p.rect_stroke(
                     r,
                     CornerRadius::same(3),
-                    Stroke::new(1.0, LCD_DIM),
+                    Stroke::new(1.0, tk.line),
                     StrokeKind::Inside,
                 );
             }
             let albums = self.lib.missing_albums.get(m).map_or(0, Vec::len);
-            glow_text(
+            text(
                 p,
                 r.left_top() + Vec2::new(10.0, 10.0),
                 Align2::LEFT_TOP,
                 &m.title().to_uppercase(),
-                font(F_MONO, 12.0),
-                LCD_INK.gamma_multiply(0.9),
-                0.4,
+                hifi::num(12.0),
+                tk.text,
             );
-            glow_text(
+            text(
                 p,
                 Pos2::new(r.right() - 10.0, r.top() + 8.0),
                 Align2::RIGHT_TOP,
                 &thousands(albums as u64),
-                font(F_MONO, 22.0),
-                LCD_INK,
-                0.3,
+                hifi::num(22.0),
+                tk.accent,
             );
             let unit = match self.lib.missing_tracks.get(m) {
                 Some(n) => format!("ALBUMS · {} TRACKS", thousands(*n as u64)),
@@ -807,9 +754,8 @@ impl LibraryApp {
                 r.left_top() + Vec2::new(10.0, 34.0),
                 Align2::LEFT_TOP,
                 &unit,
-                font(F_MONO, 11.0),
-                LCD_INK.gamma_multiply(0.55),
-                0.4,
+                hifi::num(11.0),
+                tk.dim,
             );
             if resp
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -824,27 +770,26 @@ impl LibraryApp {
         let note = "The fields the Library checks: artist, album artist, album, year, disc and track number, title, time and artwork. Every other tag in your files is kept as it is.";
         let g = p.layout(
             note.into(),
-            font(F_LEGEND, 11.5),
-            th.legend_dim,
+            hifi::ui_font(11.5),
+            tk.dim,
             tiles.width() - 28.0,
         );
         if y + g.size().y < tiles.bottom() - 10.0 {
-            p.galley(Pos2::new(tiles.left() + 14.0, y + 6.0), g, th.legend_dim);
+            p.galley(Pos2::new(tiles.left() + 14.0, y + 6.0), g, tk.dim);
         }
 
         let lr = Rect::from_min_max(Pos2::new(tiles.right() + 14.0, main.top()), main.max);
-        section(
+        heading(
             ui.painter(),
-            lr,
+            lr.min,
             &format!("Albums · {}", cur.title()),
-            th,
-            false,
+            tk,
         );
         let inner = Rect::from_min_max(
             lr.min + Vec2::new(10.0, 16.0),
             lr.max - Vec2::new(10.0, 10.0),
         );
-        well(ui.painter(), inner, th);
+        well(ui.painter(), inner, tk);
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 28.0));
         let w = inner.width();
         let c_artist = inner.left() + 12.0;
@@ -862,7 +807,7 @@ impl LibraryApp {
                 (c_miss, "Missing", Align2::LEFT_CENTER),
                 (c_where, "Where it is", Align2::LEFT_CENTER),
             ],
-            th,
+            tk,
         );
         let list = Rect::from_min_max(Pos2::new(inner.left(), head.bottom() + 1.0), inner.max);
         let items: Vec<usize> = self
@@ -882,9 +827,8 @@ impl LibraryApp {
                 list.left_top() + Vec2::new(12.0, 12.0),
                 Align2::LEFT_TOP,
                 msg,
-                font(F_LEGEND, 13.0),
-                th.legend_dim,
-                0.0,
+                hifi::ui_font(13.0),
+                tk.dim,
             );
         }
         let mut clicked = None;
@@ -898,15 +842,15 @@ impl LibraryApp {
             |ui, i, row, resp| {
                 let a = &self.lib.albums[items[i]];
                 let p = ui.painter();
-                row_bg(p, row, resp, false, th);
+                row_bg(p, row, resp, false, tk);
                 let y = row.center().y;
                 fit(
                     p,
                     Pos2::new(c_artist, y),
                     Align2::LEFT_CENTER,
                     &a.artist,
-                    font(F_LEGEND_BOLD, 13.0),
-                    th.legend,
+                    hifi::semi(13.0),
+                    tk.text,
                     c_album - c_artist - 10.0,
                 );
                 fit(
@@ -914,8 +858,8 @@ impl LibraryApp {
                     Pos2::new(c_album, y),
                     Align2::LEFT_CENTER,
                     &a.title,
-                    font(F_LEGEND, 13.0),
-                    th.legend,
+                    hifi::ui_font(13.0),
+                    tk.text,
                     c_year - c_album - 50.0,
                 );
                 match a.year {
@@ -924,18 +868,16 @@ impl LibraryApp {
                         Pos2::new(c_year, y),
                         Align2::RIGHT_CENTER,
                         &yr.to_string(),
-                        font(F_MONO, 12.5),
-                        th.legend,
-                        0.0,
+                        hifi::num(12.5),
+                        tk.text,
                     ),
                     None => text(
                         p,
                         Pos2::new(c_year, y),
                         Align2::RIGHT_CENTER,
                         "----",
-                        font(F_MONO, 12.5),
-                        LED,
-                        0.0,
+                        hifi::num(12.5),
+                        BAD,
                     ),
                 };
                 let mut x = c_miss;
@@ -946,9 +888,8 @@ impl LibraryApp {
                             Pos2::new(x, y),
                             Align2::LEFT_CENTER,
                             "…",
-                            font(F_LEGEND_BOLD, 13.0),
-                            LED,
-                            0.0,
+                            hifi::semi(13.0),
+                            BAD,
                         );
                         break;
                     }
@@ -956,7 +897,7 @@ impl LibraryApp {
                         p,
                         Pos2::new(x, y),
                         m.chip(),
-                        if m.is_warning() { AMBER } else { LED },
+                        if m.is_warning() { AMBER } else { BAD },
                         false,
                     ) + 4.0;
                 }
@@ -970,8 +911,8 @@ impl LibraryApp {
                     Pos2::new(c_where, y),
                     Align2::LEFT_CENTER,
                     &format!("{label} › {}", a.dir),
-                    font(F_LEGEND, 12.0),
-                    th.legend_dim,
+                    hifi::ui_font(12.0),
+                    tk.dim,
                     row.right() - c_where - 10.0,
                 );
                 if resp.clicked() {
@@ -997,8 +938,8 @@ impl LibraryApp {
 
     // ------------------------------------------------------------ later
 
-    pub fn later_view(&mut self, ui: &mut Ui, main: Rect, th: &Theme, which: &str) {
-        section(ui.painter(), main, which, th, false);
+    pub fn later_view(&mut self, ui: &mut Ui, main: Rect, tk: &Tokens, which: &str) {
+        heading(ui.painter(), main.min, which, tk);
         let (title, body) = if which == "Dupes" {
             (
                 "Duplicates come in stage 3",
@@ -1012,21 +953,16 @@ impl LibraryApp {
         };
         let p = ui.painter();
         let c = main.center() - Vec2::new(0.0, 60.0);
-        glow_text(
+        text(
             p,
             c,
             Align2::CENTER_BOTTOM,
             &title.to_uppercase(),
-            font(F_MONO, 18.0),
-            LCD_INK,
-            0.6,
+            hifi::num(18.0),
+            tk.accent,
         );
-        let g = p.layout(body.into(), font(F_LEGEND, 14.0), th.legend_dim, 620.0);
-        p.galley(
-            Pos2::new(c.x - g.size().x / 2.0, c.y + 18.0),
-            g,
-            th.legend_dim,
-        );
+        let g = p.layout(body.into(), hifi::ui_font(14.0), tk.dim, 620.0);
+        p.galley(Pos2::new(c.x - g.size().x / 2.0, c.y + 18.0), g, tk.dim);
     }
 }
 
@@ -1063,6 +999,7 @@ fn draw_art(
     tex: Option<&egui::TextureHandle>,
     art: &Art,
     text_size: f32,
+    tk: &Tokens,
 ) {
     match (tex, art) {
         (Some(t), _) => {
@@ -1074,11 +1011,11 @@ fn draw_art(
             );
         }
         (None, Art::None) => {
-            p.rect_filled(r, CornerRadius::same(2), LCD_BG);
+            p.rect_filled(r, CornerRadius::same(2), tk.well);
             p.rect_stroke(
                 r,
                 CornerRadius::same(2),
-                Stroke::new(1.0, LCD_DIM),
+                Stroke::new(1.0, tk.line),
                 StrokeKind::Inside,
             );
             let big = r.width() > 80.0;
@@ -1086,18 +1023,13 @@ fn draw_art(
             let line_h = text_size + 4.0;
             let top = r.center().y - line_h * lines.len() as f32 / 2.0;
             for (i, line) in lines.iter().enumerate() {
-                glow_text(
+                text(
                     p,
                     Pos2::new(r.center().x, top + i as f32 * line_h),
                     Align2::CENTER_TOP,
                     line,
-                    font(F_MONO, text_size),
-                    if big {
-                        LCD_INK
-                    } else {
-                        LCD_DIM.gamma_multiply(2.0)
-                    },
-                    0.3,
+                    hifi::num(text_size),
+                    if big { tk.accent } else { tk.dim },
                 );
             }
         }
@@ -1112,22 +1044,22 @@ fn draw_art(
     }
 }
 
-/// Opens a file or folder with the computer's default program.
 /// Where to look for the TAW Player: next to the Library, in a folder beside
 /// the Library's named after it (two unzipped downloads side by side), then
 /// the PATH.
-fn player_candidates(
+fn app_candidates(
+    program: &str,
     here: Option<&std::path::Path>,
     path_var: Option<&std::ffi::OsStr>,
 ) -> Vec<std::path::PathBuf> {
     let exe = if cfg!(windows) {
-        "taw-player.exe"
+        format!("{program}.exe")
     } else {
-        "taw-player"
+        program.to_string()
     };
     let mut v = Vec::new();
     if let Some(dir) = here {
-        v.push(dir.join(exe));
+        v.push(dir.join(&exe));
         if let Some(Ok(rd)) = dir.parent().map(std::fs::read_dir) {
             let mut sib: Vec<_> = rd
                 .flatten()
@@ -1135,9 +1067,9 @@ fn player_candidates(
                     e.file_name()
                         .to_string_lossy()
                         .to_ascii_lowercase()
-                        .starts_with("taw-player")
+                        .starts_with(program)
                 })
-                .map(|e| e.path().join(exe))
+                .map(|e| e.path().join(&exe))
                 .collect();
             // The newest version first.
             sib.sort();
@@ -1146,22 +1078,24 @@ fn player_candidates(
         }
     }
     if let Some(p) = path_var {
-        v.extend(std::env::split_paths(p).map(|d| d.join(exe)));
+        v.extend(std::env::split_paths(p).map(|d| d.join(&exe)));
     }
     v
 }
 
-/// The TAW Player, if it's installed where the Library can find it.
-fn find_player() -> Option<std::path::PathBuf> {
+/// A family app (`taw-player`, `taw-equaliser`, `taw-analyser`), if it's
+/// installed where the Library can find it.
+pub(crate) fn find_app(program: &str) -> Option<std::path::PathBuf> {
     let here = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(std::path::Path::to_path_buf));
     let path = std::env::var_os("PATH");
-    player_candidates(here.as_deref(), path.as_deref())
+    app_candidates(program, here.as_deref(), path.as_deref())
         .into_iter()
         .find(|p| p.is_file())
 }
 
+/// Opens a file or folder with the computer's default program.
 pub fn open_path(path: &std::path::Path) {
     #[cfg(windows)]
     let r = std::process::Command::new("explorer").arg(path).spawn();
@@ -1172,7 +1106,7 @@ pub fn open_path(path: &std::path::Path) {
 
 #[cfg(test)]
 mod player_tests {
-    use super::player_candidates;
+    use super::app_candidates;
 
     #[test]
     fn looks_beside_then_siblings_then_path() {
@@ -1182,7 +1116,7 @@ mod player_tests {
         std::fs::create_dir_all(&here).unwrap();
         std::fs::create_dir_all(d.join("taw-player-0.1.0")).unwrap();
         let path = std::env::join_paths([d.join("bin")]).unwrap();
-        let c = player_candidates(Some(&here), Some(&path));
+        let c = app_candidates("taw-player", Some(&here), Some(&path));
         let exe = if cfg!(windows) {
             "taw-player.exe"
         } else {

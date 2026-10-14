@@ -11,11 +11,11 @@ Written 2026-10-14 when the family's work moved from one shared chat to a chat p
 
 Moving the Library to the TAW look, following the Player (TAW-Player `src/app.rs` is the model: plate(), settings drawer, fit_to_window, frameless window). Steps, ticked as they're pushed to this branch:
 
-- [ ] Pin TAW-Panel 0.3.0 (`1b8162d`), `hifi::install_fonts`, `Saved` gains `finish`, `simple`, `system_title_bar` (keep `panel` with `#[allow(dead_code)]`).
-- [ ] Plate: nameplate, window buttons, family switcher (current 0 = Library), Simple/Detailed, gear; frameless window in main.rs.
-- [ ] Views (`ui/views.rs`) redrawn with `hifi` tokens: sidebar, search, album list, album detail with Play in Player.
-- [ ] Settings drawer: look, Lookups, library folders, window, keys.
-- [ ] Screenshots (test library: `tools/make-test-library.sh`), docs, CHANGELOG, push.
+- [x] Pin TAW-Panel 0.3.0 (`1b8162d`), `hifi::install_fonts`, `Saved` gains `finish`, `simple`, `system_title_bar` (keep `panel` with `#[allow(dead_code)]`).
+- [x] Plate: nameplate, window buttons, family switcher (current 0 = Library), Simple/Detailed, gear; frameless window in main.rs.
+- [x] Views (`ui/views.rs`) redrawn with `hifi` tokens: sidebar, search, album list, album detail with Play in Player.
+- [x] Settings drawer: look, Lookups, library folders, window, keys.
+- [ ] Checkpoint `wip` builds; still to do: look at it under Xvfb and fix layout (album detail toward the mock-up: big title, chips, Play in Player + Show folder), then screenshots (test library: `tools/make-test-library.sh`), docs, CHANGELOG, push.
 
 ## Next
 

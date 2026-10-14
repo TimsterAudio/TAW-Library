@@ -1,4 +1,5 @@
 pub mod app;
+pub mod look;
 pub mod views;
 
 // The shared Timster's Audio Works panel.
