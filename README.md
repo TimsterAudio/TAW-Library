@@ -1,6 +1,6 @@
 # TAW Library
 
-**Timster's Audio Works – Library (LB-001) v0.2.0**: a native music library manager for Windows and Linux. One of the family's hi-fi separates, with the Player, Equaliser and Analyser, in their shared TAW look (Spool or Porcelain, light or dark). It was called Music Box until 0.2.0.
+**Timster's Audio Works – Library (LB-001) v0.3.0**: a native music library manager for Windows and Linux. One of the family's hi-fi separates, with the Player, Equaliser and Analyser, in their shared TAW look (Spool or Porcelain, light or dark). It was called Music Box until 0.2.0.
 
 ![The Library showing a test library](docs/screenshot.png)
 

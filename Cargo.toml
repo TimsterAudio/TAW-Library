@@ -3,7 +3,7 @@ members = ["crates/mb-core"]
 
 [workspace.package]
 # The release version for the whole project.
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [package]
