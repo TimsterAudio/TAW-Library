@@ -1,5 +1,19 @@
 # Roadmap
 
+## Pipeline (proposed 2026-10-14)
+
+The stages below, release by release. Sizes: S = one session, M = two or three, L = a release of its own. Briefs from the family session go in `docs/briefs/`; TAW-Panel's `docs/TRACKER.md` tracks the family as a whole.
+
+| Release | What | Needs | Size |
+|---|---|---|---|
+| 0.3.x | Fixes from the user's review of the TAW look | The review | S |
+| 0.4.0 | Resizable panes and columns, widths remembered per view | TAW-Panel 0.5.0 | S–M |
+| 0.5.0 | Stage 2: MusicBrainz and Cover Art Archive lookups, staged as proposals, off until Lookups is switched on | — | L |
+| 0.5.x | AcoustID fingerprints for untagged files (Chromaprint bundled for both platforms) | — | M |
+| 0.6.0 | Stage 3: tag writing, with the change log and undo. The first release that writes to music files: test on copies | — | L |
+| 0.7.0 | Stage 4a: duplicates, with keep suggestions and the Review folder | — | L |
+| 0.8.0 | Stage 4b: the organise plan, copy (default) or move, each copy checked, with undo | — | L |
+
 ## Stage 1: scan and report (read-only) — v0.1
 - [x] Drives by volume ID, offline drives kept, new drives noticed
 - [x] Scanning with incremental rescans and exclude rules (system, DAW projects, sample packs)
@@ -28,6 +42,6 @@
 
 ## Later
 - [x] Hand albums and playlists to the TAW Player (albums; playlists when the Library has them)
-- [ ] The shared panel crate for the family (see docs/ECOSYSTEM.md)
+- [x] The shared panel crate for the family: TAW-Panel (0.2.0)
 - [x] The TAW look (TAW-Panel `hifi`): Spool or Porcelain, Light, Dark or Automatic; Simple and Detailed; own title strip and window buttons
 - [ ] Resizable panes and columns (drag to resize, double-click to fit, widths remembered)
