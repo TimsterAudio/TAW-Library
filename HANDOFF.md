@@ -7,6 +7,16 @@ Written 2026-10-14 when the family's work moved from one shared chat to a chat p
 - `main` is 0.2.0, released (Jupiter panel).
 - Branch `claude/focused-ritchie-veg4m9`, unmerged: one commit (`c0bc732`), the Play key hands the album to the TAW Player (`taw-player --play <m3u8>`) when it's found next to the Library, in a sibling `taw-player…` folder, or on the PATH; otherwise the default player as before.
 
+## In progress (2026-10-14, main chat)
+
+Moving the Library to the TAW look, following the Player (TAW-Player `src/app.rs` is the model: plate(), settings drawer, fit_to_window, frameless window). Steps, ticked as they're pushed to this branch:
+
+- [ ] Pin TAW-Panel 0.3.0 (`1b8162d`), `hifi::install_fonts`, `Saved` gains `finish`, `simple`, `system_title_bar` (keep `panel` with `#[allow(dead_code)]`).
+- [ ] Plate: nameplate, window buttons, family switcher (current 0 = Library), Simple/Detailed, gear; frameless window in main.rs.
+- [ ] Views (`ui/views.rs`) redrawn with `hifi` tokens: sidebar, search, album list, album detail with Play in Player.
+- [ ] Settings drawer: look, Lookups, library folders, window, keys.
+- [ ] Screenshots (test library: `tools/make-test-library.sh`), docs, CHANGELOG, push.
+
 ## Next
 
 1. Move to the TAW look (TAW-Panel `hifi`, Spool Light Amber default); the reviewed mock-up is TAW-Panel `docs/finishes-review.html` (Library, Detailed and Simple).
