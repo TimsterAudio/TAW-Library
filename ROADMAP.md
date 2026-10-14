@@ -7,7 +7,7 @@ The stages below, release by release. Sizes: S = one session, M = two or three, 
 | Release | What | Needs | Size |
 |---|---|---|---|
 | 0.3.x | Fixes from the user's review of the TAW look | The review | S |
-| 0.4.0 | Resizable panes and columns, widths remembered per view | TAW-Panel 0.5.0 | S–M |
+| 0.4.0 | Resizable panes and columns, widths remembered per view | TAW-Panel 0.4.0 | S–M |
 | 0.5.0 | Stage 2: MusicBrainz and Cover Art Archive lookups, staged as proposals, off until Lookups is switched on | — | L |
 | 0.5.x | AcoustID fingerprints for untagged files (Chromaprint bundled for both platforms) | — | M |
 | 0.6.0 | Stage 3: tag writing, with the change log and undo. The first release that writes to music files: test on copies | — | L |
