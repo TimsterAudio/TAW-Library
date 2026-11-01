@@ -395,12 +395,12 @@ impl LibraryApp {
             _ => ("taw-analyser", "Analyser"),
         };
         match super::views::find_app(prog) {
-            Some(exe) => match std::process::Command::new(&exe)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
+            Some(exe) => match crate::instance::start(
+                std::process::Command::new(&exe)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null()),
+            ) {
                 Ok(_) => self.tell(format!("Starting the {name}…")),
                 Err(e) => self.tell(format!("The {name} wouldn't start: {e}")),
             },

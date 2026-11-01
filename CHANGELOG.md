@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.1 – 2026-11-01
+
+- **One Library at a time.** Clicking the Library in another app's family switcher (or opening the Library again) brings the open one to the front, restored if it was minimised, instead of starting a second Library.
+- Starting the Player (the Play key or the family switcher) no longer leaves a finished process behind each time.
+
 ## 0.3.0 – 2026-10-14
 
 The Library in the family's TAW look, matching the Player, Equaliser and Analyser.
