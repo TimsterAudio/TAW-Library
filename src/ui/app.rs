@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::Relaxed;
 use taw_panel::hifi::{self, Tokens};
+use taw_panel::table;
 use taw_panel::theme::PanelKind;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -24,7 +25,10 @@ const STORAGE_KEY: &str = "taw-library";
 pub const DEFAULT_SIZE: Vec2 = Vec2::new(1360.0, 820.0);
 /// Below this size the whole panel scales down instead of squeezing.
 const MIN_DESIGN: Vec2 = Vec2::new(1240.0, 720.0);
-const PLATE_H: f32 = 96.0;
+/// The nameplate strip (drag it to move the window), as in the Player.
+const PLATE_H: f32 = 66.0;
+/// The middle of the nameplate's row of keys, just under the window buttons.
+const ROW_Y: f32 = 46.0;
 const FOOT_H: f32 = 36.0;
 /// The sidebar (views and drives).
 pub const SIDE_W: f32 = 230.0;
@@ -81,6 +85,8 @@ pub struct Saved {
     pub simple: bool,
     /// Use the system's title bar instead of the Library's own.
     pub system_title_bar: bool,
+    /// Pane widths, and each list's column widths and hidden columns.
+    pub layout: table::Layout,
 }
 
 pub struct LibraryApp {
@@ -420,16 +426,16 @@ impl LibraryApp {
         }
         hifi::nameplate(
             ui,
-            screen.min + Vec2::new(24.0, 14.0),
+            screen.min + Vec2::new(24.0, 10.0),
             t,
             "Library",
             &format!("LB-001 · Music library manager · V{VERSION}"),
         );
         if !self.s.system_title_bar {
-            hifi::window_buttons(ui, Pos2::new(screen.right() - 10.0, screen.top() + 10.0), t);
+            hifi::window_buttons(ui, Pos2::new(screen.right() - 10.0, screen.top() + 6.0), t);
         }
         let right = screen.right() - 24.0;
-        let row = screen.top() + 66.0;
+        let row = screen.top() + ROW_Y;
         let gear = Rect::from_min_size(Pos2::new(right - 30.0, row - 15.0), Vec2::splat(30.0));
         if hifi::gear_button(ui, gear, Id::new("settings"), t, self.settings_open).clicked() {
             self.settings_open = !self.settings_open;
@@ -499,10 +505,10 @@ impl LibraryApp {
         // The search field.
         let field = Rect::from_min_max(Pos2::new(r.left(), y - 18.0), Pos2::new(x - 4.0, y + 18.0));
         let p = ui.painter();
-        p.rect_filled(field, CornerRadius::same(8), t.well);
+        p.rect_filled(field, CornerRadius::same(hifi::RADIUS), t.well);
         p.rect_stroke(
             field,
-            CornerRadius::same(8),
+            CornerRadius::same(hifi::RADIUS),
             Stroke::new(1.0, t.line),
             StrokeKind::Inside,
         );
@@ -568,9 +574,9 @@ impl LibraryApp {
             let on = self.s.view == v;
             let p = ui.painter();
             if on {
-                p.rect_filled(r, CornerRadius::same(8), t.select);
+                p.rect_filled(r, CornerRadius::same(hifi::RADIUS), t.select);
             } else if resp.hovered() {
-                p.rect_filled(r, CornerRadius::same(8), t.line_soft);
+                p.rect_filled(r, CornerRadius::same(hifi::RADIUS), t.line_soft);
             }
             text(
                 p,
@@ -1137,5 +1143,15 @@ mod tests {
         assert_eq!(s.missing, 2);
         assert!(!s.simple);
         assert_eq!(s.finish, hifi::Look::default());
+        assert_eq!(s.layout, table::Layout::default());
+    }
+
+    #[test]
+    fn pane_and_column_widths_are_remembered() {
+        let mut s = Saved::default();
+        *s.layout.pane_mut("artists") = 280.0;
+        s.layout.list_mut("albums").hidden.insert("needs".into());
+        let back: Saved = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.layout, s.layout);
     }
 }

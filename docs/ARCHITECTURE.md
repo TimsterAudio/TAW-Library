@@ -30,7 +30,7 @@
 | `mb-core/src/library.rs` | Builds albums and artists from the tracks, works out what each album is missing, and suggests artist merges. Albums are grouped by drive, album folder (CD1/CD2 folders join their parent) and album name, so copies on two drives stay two albums for the Dupes view to find. |
 | `src/workers.rs` | The scan thread, the drive watcher and the artwork loader. |
 | `src/instance.rs` | One Library at a time: a later launch asks the open one to come forward and exits (the family's way, in TAW-Panel's FAMILY.md); `start` runs a family app and collects it when it ends. |
-| `src/ui/*` | The panel: `app.rs` (nameplate, search, sidebar, footer, settings), `views.rs` (the views) and `look.rs` (the list pieces in the TAW look). The look itself (finishes, nameplate, window buttons, controls) comes from the shared `taw-panel` crate's `hifi` module (TimsterAudio/TAW-Panel). |
+| `src/ui/*` | The panel: `app.rs` (nameplate, search, sidebar, footer, settings), `views.rs` (the views) and `look.rs` (the list pieces in the TAW look). Panes and list columns are TAW-Panel's `table`; their widths and hidden columns are saved in `Saved::layout`, by pane and list name (`artists`, `album`, `missing-tiles`; `albums`, `tracks`, `missing`). The look itself (finishes, nameplate, window buttons, controls) comes from the shared `taw-panel` crate's `hifi` module (TimsterAudio/TAW-Panel). |
 
 ## Rules the code keeps
 

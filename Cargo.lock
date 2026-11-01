@@ -1268,7 +1268,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "mb-core"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "dirs",
  "imagesize",
@@ -2362,7 +2362,7 @@ dependencies = [
 
 [[package]]
 name = "taw-library"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "eframe",
  "egui",
@@ -2377,8 +2377,8 @@ dependencies = [
 
 [[package]]
 name = "taw-panel"
-version = "0.5.0"
-source = "git+https://github.com/TimsterAudio/TAW-Panel?rev=41b1742396d58f261228f124b38290e3e168e1d9#41b1742396d58f261228f124b38290e3e168e1d9"
+version = "0.6.0"
+source = "git+https://github.com/TimsterAudio/TAW-Panel?rev=efbded44e5438f17b142416db7d7d1d46232da06#efbded44e5438f17b142416db7d7d1d46232da06"
 dependencies = [
  "egui",
  "serde",

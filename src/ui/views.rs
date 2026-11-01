@@ -8,19 +8,64 @@ use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Sense, Stroke, StrokeK
 use mb_core::library::{fmt_duration, Album, Art, Missing};
 use mb_core::volumes;
 use taw_panel::hifi::{self, Tokens};
+use taw_panel::table::{self, Col, Side};
 
+/// The gap between panes, where a drag resizes them.
+const GAP: f32 = 14.0;
 const ARTISTS_W: f32 = 210.0;
 const DETAIL_W: f32 = 390.0;
+const DETAIL_MIN: f32 = 340.0;
+/// The albums list keeps at least this much when the album pane grows.
+/// (The columns' minimums, 58 + 60 + 140 + 110, and the well's edges.)
+const ALBUMS_MIN: f32 = 372.0;
+const TILES_W: f32 = 270.0;
+
+/// The albums list: artwork, year, album (the flexible one), what it needs.
+const ALBUM_COLS: [Col; 4] = [
+    Col::new("art", "", 58.0).fixed(),
+    Col::new("year", "Year", 62.0).right().min(60.0),
+    Col::new("album", "Album", 260.0).flex().min(140.0),
+    Col::new("needs", "Needs", 230.0).min(110.0),
+];
+
+/// What's missing: the albums with that gap.
+const MISSING_COLS: [Col; 5] = [
+    Col::new("artist", "Artist", 150.0).min(80.0),
+    Col::new("album", "Album", 220.0).flex().min(140.0),
+    Col::new("year", "Year", 62.0).right().min(60.0),
+    Col::new("missing", "Missing", 190.0).min(90.0),
+    Col::new("where", "Where it is", 200.0).min(100.0),
+];
 
 impl LibraryApp {
     // ------------------------------------------------------------ library
 
     pub fn library_view(&mut self, ui: &mut Ui, main: Rect, tk: &Tokens) {
-        let artists = Rect::from_min_size(main.min, Vec2::new(ARTISTS_W, main.height()));
-        let detail = Rect::from_min_max(Pos2::new(main.right() - DETAIL_W, main.top()), main.max);
-        let albums = Rect::from_min_max(
-            Pos2::new(artists.right() + 14.0, main.top()),
-            Pos2::new(detail.left() - 14.0, main.bottom()),
+        let (artists, rest) = table::pane(
+            ui,
+            main,
+            "artists",
+            Side::Left,
+            self.s.layout.pane_mut("artists"),
+            ARTISTS_W,
+            // Room left for the albums list and the album pane at its narrowest.
+            (
+                160.0,
+                360.0f32.min(main.width() - ALBUMS_MIN - DETAIL_MIN - 2.0 * GAP),
+            ),
+            GAP,
+            tk,
+        );
+        let (detail, albums) = table::pane(
+            ui,
+            rest,
+            "album",
+            Side::Right,
+            self.s.layout.pane_mut("album"),
+            DETAIL_W,
+            (DETAIL_MIN, rest.width() - ALBUMS_MIN - GAP),
+            GAP,
+            tk,
         );
         self.artists_list(ui, artists, tk);
         self.albums_list(ui, albums, tk);
@@ -160,19 +205,12 @@ impl LibraryApp {
         well(ui.painter(), inner, tk);
         let Some(artist) = artist else { return };
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 28.0));
-        let w = inner.width();
-        let c_year = inner.left() + 96.0;
-        let c_album = inner.left() + 108.0;
-        let c_needs = inner.left() + (w * 0.6).max(250.0);
-        let c_fmt = c_needs;
-        header(
-            ui.painter(),
+        let cols = table::header(
+            ui,
             head,
-            &[
-                (c_year, "Year", Align2::RIGHT_CENTER),
-                (c_album, "Album", Align2::LEFT_CENTER),
-                (c_needs, "Needs", Align2::LEFT_CENTER),
-            ],
+            "albums",
+            &ALBUM_COLS,
+            self.s.layout.list_mut("albums"),
             tk,
         );
         let list = Rect::from_min_max(Pos2::new(inner.left(), head.bottom() + 1.0), inner.max);
@@ -200,106 +238,104 @@ impl LibraryApp {
                 let a = &self.lib.albums[ai].clone();
                 let selected = sel.as_ref().is_some_and(|k| k.matches(a));
                 row_bg(ui.painter(), row, resp, selected, tk);
-                let thumb = Rect::from_min_size(
-                    Pos2::new(row.left() + 10.0, row.center().y - 19.0),
-                    Vec2::splat(38.0),
-                );
-                let tex = art_texture(self, &ctx, a, 96);
-                let p = ui.painter();
-                draw_art(p, thumb, tex.as_ref(), &a.art, 9.0, tk);
                 let y = row.center().y;
-                if a.missing.contains(&Missing::Year) && a.year.is_none() {
-                    text(
-                        p,
-                        Pos2::new(c_year, y),
-                        Align2::RIGHT_CENTER,
-                        "----",
-                        hifi::num(13.0),
-                        BAD,
-                    );
-                } else if let Some(yr) = a.year {
-                    text(
-                        p,
-                        Pos2::new(c_year, y),
-                        Align2::RIGHT_CENTER,
-                        &yr.to_string(),
-                        hifi::num(13.0),
-                        tk.text,
-                    );
+                if let Some(c) = cols.get("art") {
+                    let thumb = Rect::from_min_size(Pos2::new(c.x(), y - 19.0), Vec2::splat(38.0));
+                    let tex = art_texture(self, &ctx, a, 96);
+                    draw_art(ui.painter(), thumb, tex.as_ref(), &a.art, 9.0, tk);
                 }
-                fit(
-                    p,
-                    Pos2::new(c_album, y - 1.0),
-                    Align2::LEFT_BOTTOM,
-                    &a.title,
-                    hifi::ui_font(13.5),
-                    if a.untitled { tk.dim } else { tk.text },
-                    c_fmt - c_album - 12.0,
-                );
-                let tracks = format!(
-                    "{} track{} · {} · {}",
-                    a.tracks.len(),
-                    if a.tracks.len() == 1 { "" } else { "s" },
-                    fmt_duration(a.duration_ms),
-                    a.formats
-                        .iter()
-                        .take(2)
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(" + ")
-                );
-                fit(
-                    p,
-                    Pos2::new(c_album, y + 2.0),
-                    Align2::LEFT_TOP,
-                    &tracks,
-                    hifi::ui_font(11.5),
-                    tk.dim,
-                    c_needs - c_album - 12.0,
-                );
-                if a.missing.is_empty() {
-                    chip(p, Pos2::new(c_needs, y), "Complete", tk.ok, false);
-                } else if self.s.simple {
-                    chip(p, Pos2::new(c_needs, y), "Needs work", AMBER, false);
-                }
-                // Up to two lines of chips.
-                let (mut x, mut line) = (c_needs, 0);
-                let chips: Vec<Missing> = if self.s.simple {
-                    Vec::new()
-                } else {
-                    a.missing.iter().copied().collect()
+                let p = ui.painter();
+                match a.year {
+                    None if a.missing.contains(&Missing::Year) => {
+                        cols.text(ui, p, "year", y, "----", hifi::num(13.0), BAD)
+                    }
+                    Some(yr) => {
+                        cols.text(ui, p, "year", y, &yr.to_string(), hifi::num(13.0), tk.text)
+                    }
+                    None => None,
                 };
-                let line_y = |l: i32| {
-                    if chips.len() > 1 {
-                        y - 10.5 + l as f32 * 21.0
+                if let Some(c) = cols.get("album") {
+                    let title_c = if a.untitled { tk.dim } else { tk.text };
+                    let tracks = format!(
+                        "{} track{} · {} · {}",
+                        a.tracks.len(),
+                        if a.tracks.len() == 1 { "" } else { "s" },
+                        fmt_duration(a.duration_ms),
+                        a.formats
+                            .iter()
+                            .take(2)
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(" + ")
+                    );
+                    fit(
+                        p,
+                        Pos2::new(c.x(), y - 1.0),
+                        Align2::LEFT_BOTTOM,
+                        &a.title,
+                        hifi::ui_font(13.5),
+                        title_c,
+                        c.width(),
+                    );
+                    let natural = |s: &str, f| p.layout_no_wrap(s.to_string(), f, tk.text).size().x;
+                    cols.note(
+                        ui,
+                        "album",
+                        natural(&a.title, hifi::ui_font(13.5))
+                            .max(natural(&tracks, hifi::ui_font(11.5))),
+                    );
+                    fit(
+                        p,
+                        Pos2::new(c.x(), y + 2.0),
+                        Align2::LEFT_TOP,
+                        &tracks,
+                        hifi::ui_font(11.5),
+                        tk.dim,
+                        c.width(),
+                    );
+                }
+                if let Some(c) = cols.get("needs") {
+                    let p = &in_column(p, row, &c);
+                    let x0 = c.x();
+                    let end = c.right - table::PAD;
+                    let chips: Vec<(&str, Color32)> = if a.missing.is_empty() {
+                        vec![("Complete", tk.ok)]
+                    } else if self.s.simple {
+                        vec![("Needs work", AMBER)]
                     } else {
-                        y
-                    }
-                };
-                for m in &chips {
-                    let w = chip_width(m.chip());
-                    if x + w > row.right() - 8.0 && x > c_needs {
-                        if line == 1 {
-                            text(
-                                p,
-                                Pos2::new(x, line_y(1)),
-                                Align2::LEFT_CENTER,
-                                "…",
-                                hifi::semi(13.0),
-                                BAD,
-                            );
-                            break;
+                        a.missing
+                            .iter()
+                            .map(|m| (m.chip(), if m.is_warning() { AMBER } else { BAD }))
+                            .collect()
+                    };
+                    cols.note(
+                        ui,
+                        "needs",
+                        chips.iter().map(|(s, _)| chip_width(s) + 4.0).sum::<f32>() - 4.0,
+                    );
+                    // Up to two lines of chips.
+                    let two = chips.len() > 1;
+                    let line_y = |l: i32| if two { y - 10.5 + l as f32 * 21.0 } else { y };
+                    let (mut x, mut line) = (x0, 0);
+                    for (s, colour) in &chips {
+                        let w = chip_width(s);
+                        if x + w > end {
+                            if line == 1 || x == x0 {
+                                text(
+                                    p,
+                                    Pos2::new(x, line_y(line)),
+                                    Align2::LEFT_CENTER,
+                                    "…",
+                                    hifi::semi(13.0),
+                                    BAD,
+                                );
+                                break;
+                            }
+                            line = 1;
+                            x = x0;
                         }
-                        line = 1;
-                        x = c_needs;
+                        x += chip(p, Pos2::new(x, line_y(line)), s, *colour, false) + 4.0;
                     }
-                    x += chip(
-                        p,
-                        Pos2::new(x, line_y(line)),
-                        m.chip(),
-                        if m.is_warning() { AMBER } else { BAD },
-                        false,
-                    ) + 4.0;
                 }
                 if resp.clicked() {
                     clicked = Some(ai);
@@ -519,14 +555,20 @@ impl LibraryApp {
         well(ui.painter(), inner, tk);
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 26.0));
         let mixed = a.formats.len() > 1;
-        header(
-            ui.painter(),
+        let mut track_cols = vec![
+            Col::new("n", "#", 54.0).right().min(40.0).always(),
+            Col::new("title", "Title", 200.0).flex().min(120.0),
+        ];
+        if mixed {
+            track_cols.push(Col::new("format", "Format", 76.0).min(56.0));
+        }
+        track_cols.push(Col::new("time", "Time", 64.0).right().min(52.0));
+        let cols = table::header(
+            ui,
             head,
-            &[
-                (inner.left() + 34.0, "#", Align2::RIGHT_CENTER),
-                (inner.left() + 46.0, "Title", Align2::LEFT_CENTER),
-                (inner.right() - 12.0, "Time", Align2::RIGHT_CENTER),
-            ],
+            "tracks",
+            &track_cols,
+            self.s.layout.list_mut("tracks"),
             tk,
         );
         let list = Rect::from_min_max(Pos2::new(inner.left(), head.bottom() + 1.0), inner.max);
@@ -548,44 +590,25 @@ impl LibraryApp {
                     (Some(n), false) => format!("{n:02}"),
                     (None, _) => "--".into(),
                 };
-                text(
+                let ok = |b: bool| if b { tk.text } else { BAD };
+                cols.text(
+                    ui,
                     p,
-                    Pos2::new(row.left() + 34.0, y),
-                    Align2::RIGHT_CENTER,
+                    "n",
+                    y,
                     &num,
                     hifi::num(12.5),
-                    if t.track_no.is_some() { tk.text } else { BAD },
+                    ok(t.track_no.is_some()),
                 );
                 let title = t.title.clone().unwrap_or_else(|| t.file_name().to_string());
-                let mut tw = row.width() - 120.0;
-                if mixed {
-                    tw -= 50.0;
-                }
-                fit(
-                    p,
-                    Pos2::new(row.left() + 46.0, y),
-                    Align2::LEFT_CENTER,
-                    &title,
-                    hifi::ui_font(13.0),
-                    if t.title.is_some() { tk.text } else { tk.dim },
-                    tw,
-                );
-                text(
-                    p,
-                    Pos2::new(row.right() - 12.0, y),
-                    Align2::RIGHT_CENTER,
-                    &fmt_duration(t.duration_ms),
-                    hifi::num(12.5),
-                    tk.text,
-                );
-                if mixed {
-                    chip(
-                        p,
-                        Pos2::new(row.right() - 100.0, y),
-                        &t.format,
-                        if t.lossless() { tk.ok } else { tk.dim },
-                        false,
-                    );
+                let title_c = if t.title.is_some() { tk.text } else { tk.dim };
+                cols.text(ui, p, "title", y, &title, hifi::ui_font(13.0), title_c);
+                let time = fmt_duration(t.duration_ms);
+                cols.text(ui, p, "time", y, &time, hifi::num(12.5), tk.text);
+                if let Some(c) = cols.get("format") {
+                    cols.note(ui, "format", chip_width(&t.format));
+                    let colour = if t.lossless() { tk.ok } else { tk.dim };
+                    chip(p, Pos2::new(c.x(), y), &t.format, colour, false);
                 }
                 if let Some(e) = &t.error {
                     resp.clone()
@@ -666,7 +689,17 @@ impl LibraryApp {
     // ------------------------------------------------------------ missing
 
     pub fn missing_view(&mut self, ui: &mut Ui, main: Rect, tk: &Tokens) {
-        let tiles = Rect::from_min_size(main.min, Vec2::new(270.0, main.height()));
+        let (tiles, lr) = table::pane(
+            ui,
+            main,
+            "missing-tiles",
+            Side::Left,
+            self.s.layout.pane_mut("missing-tiles"),
+            TILES_W,
+            (230.0, 380.0),
+            GAP,
+            tk,
+        );
         heading(ui.painter(), tiles.min, "What's missing", tk);
         let cur = Missing::ALL[self.s.missing.min(Missing::ALL.len() - 1)];
         let mut y = tiles.top() + 18.0;
@@ -677,19 +710,19 @@ impl LibraryApp {
             );
             let resp = ui.interact(r, Id::new(("tile", i)), Sense::click());
             let p = ui.painter();
-            p.rect_filled(r.expand(1.0), CornerRadius::same(4), tk.line);
-            p.rect_filled(r, CornerRadius::same(3), tk.well);
+            p.rect_filled(r.expand(1.0), CornerRadius::same(hifi::RADIUS + 1), tk.line);
+            p.rect_filled(r, CornerRadius::same(hifi::RADIUS), tk.well);
             if *m == cur {
                 p.rect_stroke(
                     r,
-                    CornerRadius::same(3),
+                    CornerRadius::same(hifi::RADIUS),
                     Stroke::new(1.5, tk.accent),
                     StrokeKind::Inside,
                 );
             } else if resp.hovered() {
                 p.rect_stroke(
                     r,
-                    CornerRadius::same(3),
+                    CornerRadius::same(hifi::RADIUS),
                     Stroke::new(1.0, tk.line),
                     StrokeKind::Inside,
                 );
@@ -744,7 +777,6 @@ impl LibraryApp {
             p.galley(Pos2::new(tiles.left() + 14.0, y + 6.0), g, tk.dim);
         }
 
-        let lr = Rect::from_min_max(Pos2::new(tiles.right() + 14.0, main.top()), main.max);
         heading(
             ui.painter(),
             lr.min,
@@ -754,22 +786,12 @@ impl LibraryApp {
         let inner = Rect::from_min_max(lr.min + Vec2::new(0.0, 20.0), lr.max);
         well(ui.painter(), inner, tk);
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 28.0));
-        let w = inner.width();
-        let c_artist = inner.left() + 12.0;
-        let c_album = inner.left() + w * 0.17;
-        let c_year = inner.left() + w * 0.42;
-        let c_miss = c_year + 14.0;
-        let c_where = inner.left() + w * 0.7;
-        header(
-            ui.painter(),
+        let cols = table::header(
+            ui,
             head,
-            &[
-                (c_artist, "Artist", Align2::LEFT_CENTER),
-                (c_album, "Album", Align2::LEFT_CENTER),
-                (c_year, "Year", Align2::RIGHT_CENTER),
-                (c_miss, "Missing", Align2::LEFT_CENTER),
-                (c_where, "Where it is", Align2::LEFT_CENTER),
-            ],
+            "missing",
+            &MISSING_COLS,
+            self.s.layout.list_mut("missing"),
             tk,
         );
         let list = Rect::from_min_max(Pos2::new(inner.left(), head.bottom() + 1.0), inner.max);
@@ -807,77 +829,52 @@ impl LibraryApp {
                 let p = ui.painter();
                 row_bg(p, row, resp, false, tk);
                 let y = row.center().y;
-                fit(
-                    p,
-                    Pos2::new(c_artist, y),
-                    Align2::LEFT_CENTER,
-                    &a.artist,
-                    hifi::semi(13.0),
-                    tk.text,
-                    c_album - c_artist - 10.0,
-                );
-                fit(
-                    p,
-                    Pos2::new(c_album, y),
-                    Align2::LEFT_CENTER,
-                    &a.title,
-                    hifi::ui_font(13.0),
-                    tk.text,
-                    c_year - c_album - 50.0,
-                );
+                cols.text(ui, p, "artist", y, &a.artist, hifi::semi(13.0), tk.text);
+                cols.text(ui, p, "album", y, &a.title, hifi::ui_font(13.0), tk.text);
                 match a.year {
-                    Some(yr) => text(
-                        p,
-                        Pos2::new(c_year, y),
-                        Align2::RIGHT_CENTER,
-                        &yr.to_string(),
-                        hifi::num(12.5),
-                        tk.text,
-                    ),
-                    None => text(
-                        p,
-                        Pos2::new(c_year, y),
-                        Align2::RIGHT_CENTER,
-                        "----",
-                        hifi::num(12.5),
-                        BAD,
-                    ),
+                    Some(yr) => {
+                        cols.text(ui, p, "year", y, &yr.to_string(), hifi::num(12.5), tk.text)
+                    }
+                    None => cols.text(ui, p, "year", y, "----", hifi::num(12.5), BAD),
                 };
-                let mut x = c_miss;
-                for m in &a.missing {
-                    if x > c_where - 70.0 {
-                        text(
+                if let Some(c) = cols.get("missing") {
+                    let p = &in_column(p, row, &c);
+                    let mut x = c.x();
+                    let end = c.right - table::PAD;
+                    let widths: Vec<f32> = a.missing.iter().map(|m| chip_width(m.chip())).collect();
+                    cols.note(
+                        ui,
+                        "missing",
+                        widths.iter().map(|w| w + 4.0).sum::<f32>() - 4.0,
+                    );
+                    for (m, w) in a.missing.iter().zip(widths) {
+                        if x + w > end {
+                            text(
+                                p,
+                                Pos2::new(x, y),
+                                Align2::LEFT_CENTER,
+                                "…",
+                                hifi::semi(13.0),
+                                BAD,
+                            );
+                            break;
+                        }
+                        x += chip(
                             p,
                             Pos2::new(x, y),
-                            Align2::LEFT_CENTER,
-                            "…",
-                            hifi::semi(13.0),
-                            BAD,
-                        );
-                        break;
+                            m.chip(),
+                            if m.is_warning() { AMBER } else { BAD },
+                            false,
+                        ) + 4.0;
                     }
-                    x += chip(
-                        p,
-                        Pos2::new(x, y),
-                        m.chip(),
-                        if m.is_warning() { AMBER } else { BAD },
-                        false,
-                    ) + 4.0;
                 }
                 let label = self
                     .volumes
                     .iter()
                     .find(|v| v.id == a.volume)
                     .map_or("?", |v| v.label.as_str());
-                fit(
-                    p,
-                    Pos2::new(c_where, y),
-                    Align2::LEFT_CENTER,
-                    &format!("{label} › {}", a.dir),
-                    hifi::ui_font(12.0),
-                    tk.dim,
-                    row.right() - c_where - 10.0,
-                );
+                let where_ = format!("{label} › {}", a.dir);
+                cols.text(ui, p, "where", y, &where_, hifi::ui_font(12.0), tk.dim);
                 if resp.clicked() {
                     clicked = Some(items[i]);
                 }
@@ -927,6 +924,12 @@ impl LibraryApp {
         let g = p.layout(body.into(), hifi::ui_font(14.0), tk.dim, 620.0);
         p.galley(Pos2::new(c.x - g.size().x / 2.0, c.y + 18.0), g, tk.dim);
     }
+}
+
+/// A painter that keeps what's drawn in a row inside one column.
+fn in_column(p: &egui::Painter, row: Rect, c: &table::Span) -> egui::Painter {
+    let cell = Rect::from_x_y_ranges(c.left..=c.right - table::PAD / 2.0, row.y_range());
+    p.with_clip_rect(cell.intersect(p.clip_rect()))
 }
 
 /// The album's artwork as a texture, asking the loader for it if needed.

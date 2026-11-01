@@ -1,6 +1,6 @@
 # TAW Library
 
-**Timster's Audio Works – Library (LB-001) v0.3.2**: a native music library manager for Windows and Linux. One of the family's hi-fi separates, with the Player, Equaliser and Analyser, in their shared TAW look (Linen or Porcelain, light or dark). It was called Music Box until 0.2.0.
+**Timster's Audio Works – Library (LB-001) v0.4.0**: a native music library manager for Windows and Linux. One of the family's hi-fi separates, with the Player, Equaliser and Analyser, in their shared TAW look (Linen or Porcelain, light or dark). It was called Music Box until 0.2.0.
 
 ![The Library showing a test library](docs/screenshot.png)
 
@@ -18,6 +18,7 @@ It's a desktop program written in Rust (egui for the panel). It isn't an HTML pa
 - **Merge suggestions**: "Beatles" and "The Beatles" are flagged as probably the same artist.
 - **Play** sends an album to the TAW Player when it's installed (next to the Library, in a folder beside it, or on the PATH), and to your default music player as a playlist when it isn't.
 - **Simple and Detailed.** Simple keeps search, Scan and Play; Detailed adds the drive details, Exclude, what each album is missing, and the views still to come.
+- **Resizable panes and columns**: drag the edges between the lists, and the dividers between column titles; double-click to fit or put back; right-click the titles to show or hide columns. Widths are remembered for each view.
 - **The TAW look**: Spool's warm panels by default, tinted by any of Spool's seven colour themes, or Porcelain; light, dark or following the computer. The Library draws its own title strip and window buttons; Settings can bring back the system's title bar.
 
 ## Coming next

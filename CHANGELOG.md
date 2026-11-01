@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.4.0 – 2026-11-01
+
+Resizable panes and columns, on TAW-Panel 0.6.0.
+
+- **Drag the edges between panes** to make the artists list, the albums list and the album wider or narrower (and What's missing's tiles); double-click an edge to put it back.
+- **Drag the dividers between column titles** to resize the columns of the albums, tracks and What's missing lists. Double-click a divider to fit the column to what's in it. The album title takes the spare room.
+- **Right-click the column titles** to show or hide columns (Year, Needs, Artist, Missing, Where it is, Format, Time) or reset the widths.
+- Pane widths, column widths and hidden columns are remembered for each view.
+- Tags that don't fit their column end in "…" instead of running past it.
+- The top band is tighter, as in the Player, Equaliser and Analyser (the shorter nameplate from TAW-Panel 0.4.0), and the search field, the view list and the What's missing tiles use the family's one corner radius.
+
 ## 0.3.2 – 2026-11-01
 
 - **The warm finish is called Linen** (it was Spool) in Settings. It looks the same, and a saved "Spool" choice opens as Linen. From TAW-Panel 0.5.0.
