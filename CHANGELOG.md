@@ -2,7 +2,10 @@
 
 ## Unreleased
 
+## 0.3.2 – 2026-11-01
+
 - **The warm finish is called Linen** (it was Spool) in Settings. It looks the same, and a saved "Spool" choice opens as Linen. From TAW-Panel 0.5.0.
+- **Resizing from the corners works**, from TAW-Panel 0.3.2: dragging a corner moves both edges (it used to move only one), and a resize or move straight after another one is no longer ignored.
 - **The tighter hi-fi look** from TAW-Panel 0.4.0, which the other three apps already have: the nameplate is the badge with the model line under it (no big slanted name), and one tighter corner radius throughout.
 
 ## 0.3.1 – 2026-11-01
