@@ -637,14 +637,15 @@ impl LibraryApp {
             Ok(()) => {
                 self.touch("Play", a.title.clone());
                 let started = find_app("taw-player").map(|exe| {
-                    std::process::Command::new(&exe)
-                        .arg("--play")
-                        .arg(&file)
-                        .stdin(std::process::Stdio::null())
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .spawn()
-                        .is_ok()
+                    crate::instance::start(
+                        std::process::Command::new(&exe)
+                            .arg("--play")
+                            .arg(&file)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null()),
+                    )
+                    .is_ok()
                 });
                 match started {
                     Some(true) => self.tell("Playing in the TAW Player."),
