@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **The warm finish is called Linen** (it was Spool) in Settings. It looks the same, and a saved "Spool" choice opens as Linen. From TAW-Panel 0.5.0.
+- **The tighter hi-fi look** from TAW-Panel 0.4.0, which the other three apps already have: the nameplate is the badge with the model line under it (no big slanted name), and one tighter corner radius throughout.
+
 ## 0.3.1 – 2026-11-01
 
 - **One Library at a time.** Clicking the Library in another app's family switcher (or opening the Library again) brings the open one to the front, restored if it was minimised, instead of starting a second Library.
