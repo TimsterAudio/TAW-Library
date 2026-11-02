@@ -1,9 +1,12 @@
 //! The Library's engine: drives, scanning, tags and the database.
 //! Nothing here touches the UI, and nothing here writes to music files.
+//! Nothing goes online except through [`lookup::Client`], which the panel
+//! only makes while Lookups is switched on.
 
 pub mod db;
 pub mod excludes;
 pub mod library;
+pub mod lookup;
 pub mod scan;
 pub mod tags;
 pub mod volumes;

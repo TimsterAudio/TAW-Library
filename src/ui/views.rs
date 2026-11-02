@@ -5,7 +5,9 @@ use super::app::{AlbumKey, LibraryApp, View};
 use super::look::*;
 use crate::workers::ArtSource;
 use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
+use mb_core::db::{LookupRow, LookupState};
 use mb_core::library::{fmt_duration, Album, Art, Missing};
+use mb_core::lookup::{self, Candidate, Field, Proposal};
 use mb_core::volumes;
 use taw_panel::hifi::{self, Tokens};
 use taw_panel::table::{self, Col, Side};
@@ -26,6 +28,23 @@ const ALBUM_COLS: [Col; 4] = [
     Col::new("year", "Year", 62.0).right().min(60.0),
     Col::new("album", "Album", 260.0).flex().min(140.0),
     Col::new("needs", "Needs", 230.0).min(110.0),
+];
+
+/// Changes a lookup proposes.
+const CHANGE_COLS: [Col; 4] = [
+    Col::new("field", "Field", 104.0).min(70.0).always(),
+    Col::new("which", "Track", 64.0).min(44.0),
+    Col::new("now", "Now", 150.0).min(60.0),
+    Col::new("new", "Proposed", 160.0).flex().min(90.0),
+];
+
+/// Releases a lookup offered.
+const RELEASE_COLS: [Col; 5] = [
+    Col::new("release", "Release", 200.0).flex().min(120.0),
+    Col::new("year", "Year", 54.0).right().min(48.0),
+    Col::new("tracks", "Tracks", 60.0).right().min(48.0),
+    Col::new("format", "Format", 92.0).min(50.0),
+    Col::new("score", "Score", 58.0).right().min(48.0),
 ];
 
 /// What's missing: the albums with that gap.
@@ -499,15 +518,39 @@ impl LibraryApp {
         let folder = self.full_path(&a.volume, &a.dir);
         let by = art_r.bottom() - 30.0;
         let mut bx = fx;
+        // (id, label, a shorter label for a narrow pane, primary)
         let mut buttons = vec![
-            ("play", "Play in Player", true),
-            ("open-folder", "Show folder", false),
+            ("play", "Play in Player", "Play", true),
+            ("open-folder", "Show folder", "Folder", false),
         ];
+        let key = AlbumKey::of(&a);
+        let queued = self
+            .lookups
+            .as_ref()
+            .is_some_and(|l| l.queued.contains(&key.as_ref()));
         if !simple {
-            buttons.push(("lookup", "Look up", false));
-            buttons.push(("edit", "Edit", false));
+            // Next to Play, so it's there in the narrowest album pane.
+            buttons.insert(
+                1,
+                (
+                    "lookup",
+                    if queued { "Looking up…" } else { "Look up" },
+                    if queued { "Looking…" } else { "Look up" },
+                    false,
+                ),
+            );
+            buttons.push(("edit", "Edit", "Edit", false));
         }
-        for (id, label, primary) in buttons {
+        // Long labels while Play, Look up and Show folder all fit; short
+        // ones (Play, Folder) when they don't.
+        let long_w: f32 = buttons
+            .iter()
+            .take(3)
+            .map(|b| hifi::button_width(ui, b.1) + 8.0)
+            .sum();
+        let short = bx + long_w > r.right() + 9.0;
+        for (id, long, short_label, primary) in buttons {
+            let label = if short { short_label } else { long };
             let w = hifi::button_width(ui, label);
             if bx + w > r.right() + 1.0 {
                 break;
@@ -523,9 +566,8 @@ impl LibraryApp {
                         }
                         None => self.tell("That album's drive isn't connected."),
                     },
-                    "lookup" => self.tell(
-                        "Looking albums up online comes in stage 2, when Lookups is turned on.",
-                    ),
+                    "lookup" if !queued => self.look_up(ai, None),
+                    "lookup" => {}
                     _ => self.tell("Editing tags comes in stage 3, with an undo log."),
                 }
             }
@@ -550,8 +592,54 @@ impl LibraryApp {
         ))
         .galley(Pos2::new(r.left(), wy), g, tk.dim);
 
-        // Tracks
-        let inner = Rect::from_min_max(Pos2::new(r.left(), wy + wh + 10.0), r.max);
+        // Tracks, and (once it's been looked up) the proposed changes and
+        // the releases MusicBrainz offered.
+        let (lk, props) = self.album_lookup(&key);
+        let mut top = wy + wh + 10.0;
+        let tab = if !simple && (lk.is_some() || queued) {
+            let n_rel = lk.as_ref().map_or(0, |l| l.candidates.len());
+            let labels = [
+                "Tracks".to_string(),
+                format!("Changes · {}", props.len()),
+                format!("Releases · {n_rel}"),
+            ];
+            let items: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let (seg, picked) = hifi::segmented(
+                ui,
+                Pos2::new(r.left(), top + 14.0),
+                false,
+                Id::new("album-tab"),
+                tk,
+                &items,
+                self.album_tab.min(2),
+                hifi::Seg::Plain,
+                &[],
+                &[],
+            );
+            if let Some(i) = picked {
+                self.album_tab = i;
+            }
+            let status = lookup_status(lk.as_ref(), queued);
+            fit(
+                ui.painter(),
+                Pos2::new(seg.right() + 12.0, seg.center().y),
+                Align2::LEFT_CENTER,
+                &status.0,
+                hifi::ui_font(12.0),
+                if status.1 { BAD } else { tk.dim },
+                r.right() - seg.right() - 12.0,
+            );
+            top = seg.bottom() + 8.0;
+            self.album_tab.min(2)
+        } else {
+            0
+        };
+        let inner = Rect::from_min_max(Pos2::new(r.left(), top), r.max);
+        match tab {
+            1 => return self.changes_list(ui, inner, &ts, &props, lk.as_ref(), tk),
+            2 => return self.releases_list(ui, inner, ai, lk.as_ref(), tk),
+            _ => {}
+        }
         well(ui.painter(), inner, tk);
         let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 26.0));
         let mixed = a.formats.len() > 1;
@@ -616,6 +704,274 @@ impl LibraryApp {
                 }
             },
         );
+    }
+
+    /// Proposed changes: album-wide ones once with how many tracks they're
+    /// for, then each track's.
+    fn changes_list(
+        &mut self,
+        ui: &mut Ui,
+        inner: Rect,
+        ts: &[mb_core::library::Track],
+        props: &[Proposal],
+        lk: Option<&LookupRow>,
+        tk: &Tokens,
+    ) {
+        well(ui.painter(), inner, tk);
+        let note_h = 28.0;
+        let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 26.0));
+        let cols = table::header(
+            ui,
+            head,
+            "changes",
+            &CHANGE_COLS,
+            self.s.layout.list_mut("changes"),
+            tk,
+        );
+        let rows_r = Rect::from_min_max(
+            Pos2::new(inner.left(), head.bottom() + 1.0),
+            Pos2::new(inner.right(), inner.bottom() - note_h),
+        );
+        let track_no = |rel: &str| {
+            ts.iter()
+                .find(|t| t.rel_path == rel)
+                .map_or("?".to_string(), |t| match t.track_no {
+                    Some(n) => format!("{n:02}"),
+                    None => t.file_name().to_string(),
+                })
+        };
+        // (field, which tracks, now, proposed)
+        let mut lines: Vec<(Field, String, Option<String>, String)> = Vec::new();
+        let mut wide: Vec<(Field, Option<String>, String, usize)> = Vec::new();
+        for p in props.iter().filter(|p| p.field.album_wide()) {
+            match wide
+                .iter_mut()
+                .find(|w| w.0 == p.field && w.1 == p.current && w.2 == p.proposed)
+            {
+                Some(w) => w.3 += 1,
+                None => wide.push((p.field, p.current.clone(), p.proposed.clone(), 1)),
+            }
+        }
+        wide.sort_by_key(|w| w.0);
+        for (f, now, new, n) in wide {
+            let which = if f == Field::Artwork {
+                "album".to_string()
+            } else if n == ts.len() {
+                "all".to_string()
+            } else {
+                format!("{n} tracks")
+            };
+            let new = if f == Field::Artwork {
+                "Front cover from the Cover Art Archive".to_string()
+            } else {
+                new
+            };
+            lines.push((f, which, now, new));
+        }
+        for p in props.iter().filter(|p| !p.field.album_wide()) {
+            let which = p.rel_path.as_deref().map_or("album".into(), track_no);
+            lines.push((p.field, which, p.current.clone(), p.proposed.clone()));
+        }
+        if lines.is_empty() {
+            let msg = match lk {
+                Some(l) => match l.state {
+                    LookupState::Matched => "Your tags already match this release.".to_string(),
+                    LookupState::Unsure => {
+                        "Not sure which release this is: pick one under Releases.".to_string()
+                    }
+                    LookupState::NotFound => "MusicBrainz has nothing like this album.".to_string(),
+                    LookupState::Failed => format!("It couldn't be looked up. {}", l.note),
+                },
+                None => "Looking it up…".to_string(),
+            };
+            let p = ui.painter();
+            let g = p.layout(msg, hifi::ui_font(13.0), tk.dim, rows_r.width() - 24.0);
+            p.galley(rows_r.left_top() + Vec2::new(12.0, 12.0), g, tk.dim);
+        }
+        rows(
+            ui,
+            rows_r,
+            "changes",
+            25.0,
+            lines.len(),
+            None,
+            |ui, i, row, resp| {
+                let (f, which, now, new) = &lines[i];
+                let p = ui.painter();
+                row_bg(p, row, resp, false, tk);
+                let y = row.center().y;
+                cols.text(ui, p, "field", y, f.label(), hifi::semi(12.0), tk.text);
+                cols.text(ui, p, "which", y, which, hifi::num(12.0), tk.dim);
+                match now {
+                    Some(v) => cols.text(ui, p, "now", y, v, hifi::ui_font(12.5), tk.dim),
+                    None => cols.text(ui, p, "now", y, "(none)", hifi::ui_font(12.5), BAD),
+                };
+                cols.text(ui, p, "new", y, new, hifi::ui_font(12.5), tk.ok);
+            },
+        );
+        let p = ui.painter();
+        p.line_segment(
+            [
+                Pos2::new(inner.left() + 1.0, inner.bottom() - note_h),
+                Pos2::new(inner.right() - 1.0, inner.bottom() - note_h),
+            ],
+            Stroke::new(1.0, tk.line_soft),
+        );
+        fit(
+            p,
+            Pos2::new(inner.left() + 12.0, inner.bottom() - note_h / 2.0),
+            Align2::LEFT_CENTER,
+            "Proposed only: nothing is written to your files. Applying comes in stage 3, with an undo log.",
+            hifi::ui_font(11.5),
+            tk.dim,
+            inner.width() - 24.0,
+        );
+    }
+
+    /// The releases a lookup offered; click one to use it.
+    fn releases_list(
+        &mut self,
+        ui: &mut Ui,
+        inner: Rect,
+        ai: usize,
+        lk: Option<&LookupRow>,
+        tk: &Tokens,
+    ) {
+        well(ui.painter(), inner, tk);
+        let head = Rect::from_min_size(inner.min, Vec2::new(inner.width(), 26.0));
+        let cols = table::header(
+            ui,
+            head,
+            "releases",
+            &RELEASE_COLS,
+            self.s.layout.list_mut("releases"),
+            tk,
+        );
+        let list = Rect::from_min_max(Pos2::new(inner.left(), head.bottom() + 1.0), inner.max);
+        let cands: Vec<Candidate> = lk.map(|l| l.candidates.clone()).unwrap_or_default();
+        let chosen = lk.and_then(|l| l.mbid.clone());
+        if cands.is_empty() {
+            text(
+                ui.painter(),
+                list.left_top() + Vec2::new(12.0, 12.0),
+                Align2::LEFT_TOP,
+                "No releases.",
+                hifi::ui_font(13.0),
+                tk.dim,
+            );
+        }
+        let tracks = self.lib.albums[ai].tracks.len();
+        let mut picked = None;
+        rows(
+            ui,
+            list,
+            "releases",
+            25.0,
+            cands.len(),
+            None,
+            |ui, i, row, resp| {
+                let c = &cands[i];
+                let p = ui.painter();
+                row_bg(p, row, resp, chosen.as_ref() == Some(&c.mbid), tk);
+                let y = row.center().y;
+                let name = format!("{} · {}", c.title, c.artist);
+                cols.text(ui, p, "release", y, &name, hifi::ui_font(12.5), tk.text);
+                if let Some(yr) = c.year {
+                    cols.text(ui, p, "year", y, &yr.to_string(), hifi::num(12.0), tk.text);
+                }
+                let tc = if c.tracks == tracks { tk.text } else { BAD };
+                cols.text(
+                    ui,
+                    p,
+                    "tracks",
+                    y,
+                    &c.tracks.to_string(),
+                    hifi::num(12.0),
+                    tc,
+                );
+                let fmt: Vec<&str> = [c.format.as_deref(), c.country.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                cols.text(
+                    ui,
+                    p,
+                    "format",
+                    y,
+                    &fmt.join(" · "),
+                    hifi::ui_font(12.0),
+                    tk.dim,
+                );
+                cols.text(
+                    ui,
+                    p,
+                    "score",
+                    y,
+                    &format!("{}%", c.score),
+                    hifi::num(12.0),
+                    tk.dim,
+                );
+                let resp = resp
+                .clone()
+                .on_hover_text("Use this release: its tracks are compared with yours and the differences proposed.");
+                if resp.clicked() {
+                    picked = Some(c.mbid.clone());
+                }
+            },
+        );
+        if let Some(m) = picked {
+            if chosen.as_ref() != Some(&m) {
+                self.look_up(ai, Some((m, cands)));
+                self.album_tab = 1;
+            }
+        }
+    }
+
+    /// Queues an album for a lookup (Lookups must be on). `chosen` is a
+    /// release the user picked, with the releases it was picked from.
+    pub fn look_up(&mut self, ai: usize, chosen: Option<(String, Vec<Candidate>)>) {
+        if !self.s.lookups || self.lookups.is_none() {
+            self.tell("Turn Lookups on first (along the top, or in Settings). Until then nothing is sent online.");
+            return;
+        }
+        let a = &self.lib.albums[ai];
+        let have = a
+            .tracks
+            .iter()
+            .map(|&i| {
+                let t = &self.lib.tracks[i];
+                lookup::Have {
+                    rel_path: t.rel_path.clone(),
+                    file_name: t.file_name().to_string(),
+                    title: t.title.clone(),
+                    artist: t.artist.clone(),
+                    album_artist: t.album_artist.clone(),
+                    album: t.album.clone(),
+                    year: t.year,
+                    track_no: t.track_no,
+                    disc_no: t.disc_no,
+                    duration_ms: t.duration_ms,
+                }
+            })
+            .collect();
+        let job = lookup::Job {
+            album: AlbumKey::of(a).as_ref(),
+            query: lookup::Query {
+                artist: a.artist.clone(),
+                album: a.title.clone(),
+                tracks: a.tracks.len(),
+                year: a.year,
+            },
+            have,
+            art_now: a.art.size().map(|(w, h)| format!("{w} × {h}")),
+            want_art: a.missing.contains(&Missing::Art) || a.missing.contains(&Missing::SmallArt),
+            chosen,
+        };
+        self.touch("Look up", a.title.clone());
+        if let Some(run) = &mut self.lookups {
+            run.send(job);
+        }
+        self.shown_lookup = None;
     }
 
     /// Plays an album in the computer's default player, through a playlist
@@ -801,6 +1157,29 @@ impl LibraryApp {
             .get(&cur)
             .cloned()
             .unwrap_or_default();
+        // Look the whole list up (Detailed, and it goes online only with
+        // Lookups on).
+        if !self.s.simple && !items.is_empty() {
+            let label = format!("Look up all {}", thousands(items.len() as u64));
+            let w = hifi::button_width(ui, &label);
+            let br = Rect::from_min_size(
+                Pos2::new(lr.right() - w, lr.top() - 6.0),
+                Vec2::new(w, 24.0),
+            );
+            if hifi::button(ui, br, Id::new("look-up-all"), tk, &label, false).clicked() {
+                if self.s.lookups {
+                    for &ai in &items {
+                        self.look_up(ai, None);
+                    }
+                    self.tell(format!(
+                        "Looking up {} albums, one request a second. Changes are proposed, not made.",
+                        items.len()
+                    ));
+                } else {
+                    self.look_up(items[0], None); // says to turn Lookups on
+                }
+            }
+        }
         if items.is_empty() {
             let msg = if self.lib.tracks.is_empty() {
                 "Nothing scanned yet. Press Scan."
@@ -923,6 +1302,45 @@ impl LibraryApp {
         );
         let g = p.layout(body.into(), hifi::ui_font(14.0), tk.dim, 620.0);
         p.galley(Pos2::new(c.x - g.size().x / 2.0, c.y + 18.0), g, tk.dim);
+    }
+}
+
+/// The line beside the album's tabs: what the lookup found, and whether
+/// it's bad news.
+fn lookup_status(lk: Option<&LookupRow>, queued: bool) -> (String, bool) {
+    if queued {
+        return ("Looking it up on MusicBrainz…".into(), false);
+    }
+    let Some(l) = lk else {
+        return (String::new(), false);
+    };
+    match l.state {
+        LookupState::Matched => {
+            let c = l
+                .candidates
+                .iter()
+                .find(|c| Some(&c.mbid) == l.mbid.as_ref());
+            let mut s = match c {
+                Some(c) => {
+                    let mut s = format!("MusicBrainz: {} · {}", c.title, c.artist);
+                    if let Some(y) = c.year {
+                        s += &format!(" · {y}");
+                    }
+                    if let Some(ct) = &c.country {
+                        s += &format!(" · {ct}");
+                    }
+                    s
+                }
+                None => "MusicBrainz: the release you picked".into(),
+            };
+            if !l.note.is_empty() {
+                s += &format!(". {}", l.note);
+            }
+            (s, false)
+        }
+        LookupState::Unsure => ("Not sure which release this is: pick one.".into(), false),
+        LookupState::NotFound => ("MusicBrainz has nothing like it.".into(), true),
+        LookupState::Failed => (format!("Couldn't look it up. {}", l.note), true),
     }
 }
 

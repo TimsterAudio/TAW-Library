@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 
 pub type Result<T> = rusqlite::Result<T>;
 
-const SCHEMA_VERSION: i64 = 1;
+/// 1: the first library (0.1.0). 2: lookups and proposals (0.5.0).
+const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -78,6 +79,88 @@ CREATE TABLE IF NOT EXISTS folder_art (
     PRIMARY KEY (volume, dir)
 );
 ";
+
+/// Schema 2: what lookups found for each album, and the changes they
+/// propose. Proposals are only ever suggestions until stage 3 applies them.
+const SCHEMA_2: &str = "
+CREATE TABLE IF NOT EXISTS lookups (
+    volume TEXT NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
+    dir TEXT NOT NULL,
+    album TEXT NOT NULL,
+    state TEXT NOT NULL,
+    mbid TEXT,
+    candidates TEXT NOT NULL DEFAULT '[]',
+    note TEXT NOT NULL DEFAULT '',
+    looked INTEGER NOT NULL,
+    PRIMARY KEY (volume, dir, album)
+);
+CREATE TABLE IF NOT EXISTS proposals (
+    id INTEGER PRIMARY KEY,
+    volume TEXT NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
+    dir TEXT NOT NULL,
+    album TEXT NOT NULL,
+    rel_path TEXT,
+    field TEXT NOT NULL,
+    current TEXT,
+    proposed TEXT NOT NULL,
+    source TEXT NOT NULL,
+    made INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS proposals_album ON proposals (volume, dir, album);
+";
+
+/// An album, as lookups and proposals are kept: its drive, folder and title.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AlbumRef {
+    pub volume: String,
+    pub dir: String,
+    pub album: String,
+}
+
+/// How a lookup went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LookupState {
+    /// One release fits well; its changes are proposed.
+    Matched,
+    /// Releases came back, but none for certain: the user picks one.
+    Unsure,
+    /// MusicBrainz has nothing like it.
+    NotFound,
+    /// It couldn't be looked up (offline, or the server said no).
+    Failed,
+}
+
+impl LookupState {
+    pub fn key(self) -> &'static str {
+        match self {
+            LookupState::Matched => "matched",
+            LookupState::Unsure => "unsure",
+            LookupState::NotFound => "none",
+            LookupState::Failed => "failed",
+        }
+    }
+    pub fn from_key(s: &str) -> LookupState {
+        match s {
+            "matched" => LookupState::Matched,
+            "unsure" => LookupState::Unsure,
+            "none" => LookupState::NotFound,
+            _ => LookupState::Failed,
+        }
+    }
+}
+
+/// What a lookup found for an album.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LookupRow {
+    pub state: LookupState,
+    /// The release chosen (by the Library, or by the user).
+    pub mbid: Option<String>,
+    /// What the search offered, best fit first.
+    pub candidates: Vec<crate::lookup::Candidate>,
+    /// Why it failed, or other news for the panel.
+    pub note: String,
+    pub looked: i64,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VolumeRow {
@@ -202,7 +285,149 @@ impl Db {
                 )?;
             }
         }
+        // Migrations, oldest first. A new library starts at the latest.
+        if version.is_none_or(|v| v < 2) {
+            conn.execute_batch(SCHEMA_2)?;
+        }
+        if version.is_some_and(|v| v < SCHEMA_VERSION) {
+            conn.execute(
+                "UPDATE meta SET value = ?1 WHERE key = 'schema'",
+                [SCHEMA_VERSION.to_string()],
+            )?;
+        }
         Ok(Db { conn })
+    }
+
+    /// The schema version this library is at.
+    pub fn schema(&self) -> Result<i64> {
+        self.conn
+            .query_row("SELECT value FROM meta WHERE key = 'schema'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .map(|s| s.parse().unwrap_or(0))
+    }
+
+    // ------------------------------------------------------------ lookups
+
+    /// Keeps what a lookup found for an album, replacing its earlier
+    /// lookup and proposals.
+    pub fn save_lookup(
+        &mut self,
+        a: &AlbumRef,
+        row: &LookupRow,
+        proposals: &[crate::lookup::Proposal],
+    ) -> Result<()> {
+        let candidates = serde_json::to_string(&row.candidates).unwrap_or_else(|_| "[]".into());
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT INTO lookups (volume, dir, album, state, mbid, candidates, note, looked)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT (volume, dir, album) DO UPDATE SET
+                state = excluded.state, mbid = excluded.mbid,
+                candidates = excluded.candidates, note = excluded.note,
+                looked = excluded.looked",
+            params![
+                a.volume,
+                a.dir,
+                a.album,
+                row.state.key(),
+                row.mbid,
+                candidates,
+                row.note,
+                row.looked
+            ],
+        )?;
+        tx.execute(
+            "DELETE FROM proposals WHERE volume = ?1 AND dir = ?2 AND album = ?3",
+            params![a.volume, a.dir, a.album],
+        )?;
+        {
+            let mut st = tx.prepare(
+                "INSERT INTO proposals (volume, dir, album, rel_path, field, current, proposed,
+                    source, made) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )?;
+            let source = row
+                .mbid
+                .as_ref()
+                .map_or("musicbrainz".to_string(), |m| format!("musicbrainz:{m}"));
+            for p in proposals {
+                st.execute(params![
+                    a.volume,
+                    a.dir,
+                    a.album,
+                    p.rel_path,
+                    p.field.key(),
+                    p.current,
+                    p.proposed,
+                    source,
+                    row.looked
+                ])?;
+            }
+        }
+        tx.commit()
+    }
+
+    /// An album's last lookup, if it's been looked up.
+    pub fn lookup(&self, a: &AlbumRef) -> Result<Option<LookupRow>> {
+        self.conn
+            .query_row(
+                "SELECT state, mbid, candidates, note, looked FROM lookups
+                 WHERE volume = ?1 AND dir = ?2 AND album = ?3",
+                params![a.volume, a.dir, a.album],
+                |r| {
+                    let c: String = r.get(2)?;
+                    Ok(LookupRow {
+                        state: LookupState::from_key(&r.get::<_, String>(0)?),
+                        mbid: r.get(1)?,
+                        candidates: serde_json::from_str(&c).unwrap_or_default(),
+                        note: r.get(3)?,
+                        looked: r.get(4)?,
+                    })
+                },
+            )
+            .optional()
+    }
+
+    /// The changes proposed for an album, in the order they were made.
+    pub fn proposals(&self, a: &AlbumRef) -> Result<Vec<crate::lookup::Proposal>> {
+        let mut st = self.conn.prepare(
+            "SELECT rel_path, field, current, proposed FROM proposals
+             WHERE volume = ?1 AND dir = ?2 AND album = ?3 ORDER BY id",
+        )?;
+        let rows = st.query_map(params![a.volume, a.dir, a.album], |r| {
+            Ok((
+                r.get::<_, Option<String>>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (rel_path, field, current, proposed) = row?;
+            if let Some(field) = crate::lookup::Field::from_key(&field) {
+                out.push(crate::lookup::Proposal {
+                    rel_path,
+                    field,
+                    current,
+                    proposed,
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    /// How many albums have been looked up, and how many have proposals.
+    pub fn lookup_counts(&self) -> Result<(i64, i64)> {
+        let looked = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM lookups", [], |r| r.get(0))?;
+        let proposed = self.conn.query_row(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT volume, dir, album FROM proposals)",
+            [],
+            |r| r.get(0),
+        )?;
+        Ok((looked, proposed))
     }
 
     // ------------------------------------------------------------ volumes
@@ -559,5 +784,83 @@ mod tests {
         let mut left: Vec<_> = known.keys().cloned().collect();
         left.sort();
         assert_eq!(left, ["A/1.mp3", "AB/3.mp3", "B/4.mp3"]);
+    }
+
+    #[test]
+    fn a_first_library_moves_to_schema_2() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("library.db");
+        {
+            // A library as 0.1.0 to 0.4.0 made it.
+            let c = Connection::open(&path).unwrap();
+            c.execute_batch(SCHEMA).unwrap();
+            c.execute("INSERT INTO meta (key, value) VALUES ('schema', '1')", [])
+                .unwrap();
+        }
+        let db = Db::open(&path).unwrap();
+        assert_eq!(db.schema().unwrap(), 2);
+        assert_eq!(db.lookup_counts().unwrap(), (0, 0));
+        // Opening it again changes nothing.
+        drop(db);
+        assert_eq!(Db::open(&path).unwrap().schema().unwrap(), 2);
+        assert_eq!(Db::open_in_memory().unwrap().schema().unwrap(), 2);
+    }
+
+    #[test]
+    fn lookups_and_proposals_are_kept() {
+        use crate::lookup::{Candidate, Field, Proposal};
+        let mut db = Db::open_in_memory().unwrap();
+        db.sync_volumes(&[vol("v1", "/m")], 1).unwrap();
+        let a = AlbumRef {
+            volume: "v1".into(),
+            dir: "Music/OKC".into(),
+            album: "OK Computer".into(),
+        };
+        assert_eq!(db.lookup(&a).unwrap(), None);
+        let row = LookupRow {
+            state: LookupState::Matched,
+            mbid: Some("bbbb".into()),
+            candidates: vec![Candidate {
+                mbid: "bbbb".into(),
+                title: "OK Computer".into(),
+                artist: "Radiohead".into(),
+                year: Some(1997),
+                country: Some("GB".into()),
+                format: Some("CD".into()),
+                tracks: 12,
+                score: 100,
+            }],
+            note: String::new(),
+            looked: 1000,
+        };
+        let p = vec![
+            Proposal {
+                rel_path: Some("Music/OKC/01.mp3".into()),
+                field: Field::Title,
+                current: None,
+                proposed: "Airbag".into(),
+            },
+            Proposal {
+                rel_path: None,
+                field: Field::Artwork,
+                current: None,
+                proposed: "/data/lookups/bbbb-front.jpg".into(),
+            },
+        ];
+        db.save_lookup(&a, &row, &p).unwrap();
+        assert_eq!(db.lookup(&a).unwrap(), Some(row.clone()));
+        assert_eq!(db.proposals(&a).unwrap(), p);
+        assert_eq!(db.lookup_counts().unwrap(), (1, 1));
+        // A second lookup replaces the first, proposals and all.
+        let none = LookupRow {
+            state: LookupState::NotFound,
+            mbid: None,
+            candidates: vec![],
+            ..row
+        };
+        db.save_lookup(&a, &none, &[]).unwrap();
+        assert_eq!(db.lookup(&a).unwrap().unwrap().state, LookupState::NotFound);
+        assert!(db.proposals(&a).unwrap().is_empty());
+        assert_eq!(db.lookup_counts().unwrap(), (1, 0));
     }
 }

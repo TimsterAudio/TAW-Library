@@ -2,8 +2,9 @@
 //! the artwork loader. The panel polls them each frame.
 
 use egui::{ColorImage, Context};
-use mb_core::db::Db;
+use mb_core::db::{AlbumRef, Db, LookupState};
 use mb_core::excludes::Excludes;
+use mb_core::lookup;
 use mb_core::scan::{self, Progress, Summary};
 use mb_core::volumes::{self, Volume};
 use std::collections::{HashMap, HashSet};
@@ -198,4 +199,66 @@ fn load(src: &ArtSource, size: u32) -> Option<ColorImage> {
         [img.width() as usize, img.height() as usize],
         img.as_raw(),
     ))
+}
+
+// ---------------------------------------------------------------- lookups
+
+/// Looks albums up one after another on a thread of its own, with its own
+/// database connection and the one-request-a-second client. Made only when
+/// Lookups is switched on, and dropped (the thread ends after the album
+/// it's on) when it's switched off.
+pub struct LookupRun {
+    jobs: Sender<lookup::Job>,
+    done: Receiver<(AlbumRef, LookupState)>,
+    /// Albums waiting or being looked up.
+    pub queued: HashSet<AlbumRef>,
+}
+
+impl LookupRun {
+    /// `art_dir` is where front covers are saved: the Library's own folder.
+    pub fn start(db_path: PathBuf, art_dir: PathBuf, ctx: Context) -> LookupRun {
+        let (jobs, rx) = channel::<lookup::Job>();
+        let (tx, done) = channel();
+        let _ = std::thread::Builder::new()
+            .name("lookups".into())
+            .spawn(move || {
+                let mut client = lookup::Client::new();
+                let mut db = Db::open(&db_path).ok();
+                for job in rx {
+                    let (row, proposals) =
+                        lookup::run(&mut client, &art_dir, &job, mb_core::now_secs());
+                    let saved = db
+                        .as_mut()
+                        .is_some_and(|db| db.save_lookup(&job.album, &row, &proposals).is_ok());
+                    let state = if saved {
+                        row.state
+                    } else {
+                        LookupState::Failed
+                    };
+                    let _ = tx.send((job.album, state));
+                    ctx.request_repaint();
+                }
+            });
+        LookupRun {
+            jobs,
+            done,
+            queued: HashSet::new(),
+        }
+    }
+
+    /// Adds an album to the queue, unless it's already in it.
+    pub fn send(&mut self, job: lookup::Job) {
+        if self.queued.insert(job.album.clone()) {
+            let _ = self.jobs.send(job);
+        }
+    }
+
+    /// The albums finished since the last call.
+    pub fn finished(&mut self) -> Vec<(AlbumRef, LookupState)> {
+        let out: Vec<_> = self.done.try_iter().collect();
+        for (a, _) in &out {
+            self.queued.remove(a);
+        }
+        out
+    }
 }

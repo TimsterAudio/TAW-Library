@@ -22,10 +22,10 @@ The stages below, release by release. Sizes: S = one session, M = two or three, 
 - [x] Play an album in the default player
 
 ## Stage 2: online lookups (off until switched on)
-- [ ] MusicBrainz lookups by album (rate-limited to one request a second)
-- [ ] Cover Art Archive artwork
+- [x] MusicBrainz lookups by album (rate-limited to one request a second)
+- [x] Cover Art Archive artwork (front covers for albums with none or small, saved in the Library's folder)
 - [ ] AcoustID fingerprints for files with no tags (needs Chromaprint)
-- [ ] Results staged as proposals; nothing written yet
+- [x] Results staged as proposals; nothing written yet
 
 ## Stage 3: tag writing
 - [ ] Edit the core fields (artist, album artist, album, year, disc, track, title, artwork)

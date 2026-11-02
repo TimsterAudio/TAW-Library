@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+Stage 2, part one: MusicBrainz lookups, off until you switch them on.
+
+- **Lookups** (along the top in Detailed, and in Settings) is off until you turn it on; until then nothing is sent online.
+- **Look up** (beside Play) searches MusicBrainz for the album's artist, title and track count, one request a second. A release that fits for certain (a strong match with the same number of tracks) is compared track by track with your tags.
+- The album pane gets **Tracks · Changes · Releases**. Changes lists what the release would change (album, album artist, year, disc, track numbers, titles, artists), album-wide changes once; Releases lists what MusicBrainz offered, and clicking one uses it instead.
+- Albums with no artwork, or artwork under 500 px, get the release's front cover from the **Cover Art Archive**, kept in the Library's own folder (`lookups` beside the database), never in your music folders.
+- **Look up all** in What's missing queues the whole list.
+- Everything is only proposed: nothing is written to your files. Applying changes comes in stage 3, with an undo log.
+- In the album pane, Play, Look up and Show folder shorten to Play, Look up and Folder when the pane is narrow.
+- The library database moves to schema 2 (lookups and proposals) the first time this version opens it.
+
 ## 0.4.0 – 2026-11-01
 
 Resizable panes and columns, on TAW-Panel 0.6.0.

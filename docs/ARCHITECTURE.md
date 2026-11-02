@@ -28,13 +28,15 @@
 | `mb-core/src/db.rs` | The SQLite schema and queries: volumes, scan locations, exclude rules, tracks, folder artwork. |
 | `mb-core/src/scan.rs` | Walks each drive, reads new or changed files, and forgets files that have gone (only under folders that were scanned completely). Batches are committed every 400 files or 2 seconds, so the panel fills in as it goes. A cancelled scan keeps what it read. |
 | `mb-core/src/library.rs` | Builds albums and artists from the tracks, works out what each album is missing, and suggests artist merges. Albums are grouped by drive, album folder (CD1/CD2 folders join their parent) and album name, so copies on two drives stay two albums for the Dupes view to find. |
-| `src/workers.rs` | The scan thread, the drive watcher and the artwork loader. |
+| `mb-core/src/lookup.rs` | Stage 2: MusicBrainz searches and releases, the Cover Art Archive, ranking candidates, pairing tracks and proposing changes; `Client` (one request a second, with the Library's user agent), only made while Lookups is on. |
+| `src/workers.rs` | The scan thread, the drive watcher, the artwork loader and, while Lookups is on, the lookup thread (one album at a time, its own database connection). |
 | `src/instance.rs` | One Library at a time: a later launch asks the open one to come forward and exits (the family's way, in TAW-Panel's FAMILY.md); `start` runs a family app and collects it when it ends. |
 | `src/ui/*` | The panel: `app.rs` (nameplate, search, sidebar, footer, settings), `views.rs` (the views) and `look.rs` (the list pieces in the TAW look). Panes and list columns are TAW-Panel's `table`; their widths and hidden columns are saved in `Saved::layout`, by pane and list name (`artists`, `album`, `missing-tiles`; `albums`, `tracks`, `missing`). The look itself (finishes, nameplate, window buttons, controls) comes from the shared `taw-panel` crate's `hifi` module (TimsterAudio/TAW-Panel). |
 
 ## Rules the code keeps
 
-- Music files are opened read-only. Nothing in stage 1 writes to them.
+- Music files are opened read-only. Nothing in stages 1 and 2 writes to them: lookups only fill the `lookups` and `proposals` tables (schema 2), and covers go to `lookups/` beside the database.
+- Nothing goes online unless Lookups is on: `lookup::Client` is the only network code, and the panel only makes one (on the lookup thread) while it is.
 - The scanner doesn't follow symbolic links, and on Linux doesn't cross into other drives mounted inside the one it's scanning (those are scanned as their own drives).
 - The panel never waits on a drive: drive listing, scanning and artwork all happen on other threads.
 

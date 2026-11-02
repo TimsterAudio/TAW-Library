@@ -3,14 +3,15 @@
 //! chosen view, the footer and the settings drawer.
 
 use super::look::*;
-use crate::workers::{ArtLoader, DriveWatch, ScanRun};
+use crate::workers::{ArtLoader, DriveWatch, LookupRun, ScanRun};
 use egui::{
     Align2, CornerRadius, CursorIcon, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
     ViewportCommand,
 };
-use mb_core::db::{Db, VolumeRow};
+use mb_core::db::{AlbumRef, Db, LookupRow, VolumeRow};
 use mb_core::excludes::{Rule, RuleKind};
 use mb_core::library::Library;
+use mb_core::lookup::Proposal;
 use mb_core::volumes::{self, Kind, Volume};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -51,6 +52,14 @@ pub struct AlbumKey {
 }
 
 impl AlbumKey {
+    /// The same album, as the database keeps lookups.
+    pub fn as_ref(&self) -> AlbumRef {
+        AlbumRef {
+            volume: self.volume.clone(),
+            dir: self.dir.clone(),
+            album: self.title.clone(),
+        }
+    }
     pub fn of(a: &mb_core::library::Album) -> AlbumKey {
         AlbumKey {
             volume: a.volume.clone(),
@@ -87,6 +96,9 @@ pub struct Saved {
     pub system_title_bar: bool,
     /// Pane widths, and each list's column widths and hidden columns.
     pub layout: table::Layout,
+    /// Lookups (MusicBrainz and the Cover Art Archive) switched on. Off
+    /// until the user turns it on; nothing goes online while it's off.
+    pub lookups: bool,
 }
 
 pub struct LibraryApp {
@@ -111,6 +123,13 @@ pub struct LibraryApp {
     settings_open: bool,
     /// Which family apps were found: Library, Player, Equaliser, Analyser.
     installed: [bool; 4],
+    /// The lookup thread, while Lookups is on.
+    pub lookups: Option<LookupRun>,
+    /// The chosen album's lookup and proposals, read from the database when
+    /// the album changes or a lookup finishes.
+    pub shown_lookup: Option<(AlbumKey, Option<LookupRow>, Vec<Proposal>)>,
+    /// The album pane's list: tracks, proposed changes, or releases.
+    pub album_tab: usize,
 }
 
 pub fn now() -> f64 {
@@ -162,7 +181,13 @@ impl LibraryApp {
             scroll_to_selection: true,
             settings_open: false,
             installed: [true, false, false, false],
+            lookups: None,
+            shown_lookup: None,
+            album_tab: 0,
         };
+        if app.s.lookups {
+            app.lookups_on(&cc.egui_ctx);
+        }
         if app.s.system_title_bar {
             cc.egui_ctx
                 .send_viewport_cmd(ViewportCommand::Decorations(true));
@@ -241,6 +266,52 @@ impl LibraryApp {
         self.touched = Some((name.into(), value.into(), now()));
     }
 
+    /// Starts the lookup thread (Lookups switched on).
+    pub fn lookups_on(&mut self, ctx: &egui::Context) {
+        self.s.lookups = true;
+        if self.lookups.is_none() {
+            let art_dir = self
+                .db_path
+                .parent()
+                .map_or_else(|| PathBuf::from("lookups"), |d| d.join("lookups"));
+            self.lookups = Some(LookupRun::start(self.db_path.clone(), art_dir, ctx.clone()));
+        }
+    }
+
+    /// Stops looking things up: the queue is dropped, and the thread ends
+    /// after the album it's on.
+    pub fn lookups_off(&mut self) {
+        self.s.lookups = false;
+        self.lookups = None;
+    }
+
+    pub fn toggle_lookups(&mut self, ctx: &egui::Context) {
+        if self.s.lookups {
+            self.lookups_off();
+            self.tell("Lookups off. Nothing is sent online.");
+        } else {
+            self.lookups_on(ctx);
+            self.tell("Lookups on. Look up sends an album's artist, title and track count to MusicBrainz, one request a second. What comes back is only proposed: nothing is written to your files.");
+        }
+    }
+
+    /// The chosen album's lookup and proposals, read again if they're stale.
+    pub fn album_lookup(&mut self, key: &AlbumKey) -> (Option<LookupRow>, Vec<Proposal>) {
+        if self.shown_lookup.as_ref().map(|s| &s.0) != Some(key) {
+            let a = key.as_ref();
+            let (row, props) = match &self.db {
+                Some(db) => (
+                    db.lookup(&a).ok().flatten(),
+                    db.proposals(&a).unwrap_or_default(),
+                ),
+                None => (None, Vec::new()),
+            };
+            self.shown_lookup = Some((key.clone(), row, props));
+        }
+        let s = self.shown_lookup.as_ref().expect("just read");
+        (s.1.clone(), s.2.clone())
+    }
+
     pub fn tell(&mut self, msg: impl Into<String>) {
         self.notice = Some((msg.into(), now()));
     }
@@ -297,6 +368,7 @@ impl LibraryApp {
                 .and_then(|d| d.volumes().ok())
                 .unwrap_or_default();
         }
+        self.poll_lookups();
         let Some(run) = &mut self.scan else { return };
         let saves = run.progress.saved.load(Relaxed);
         let running = run.running();
@@ -335,6 +407,31 @@ impl LibraryApp {
                 Err(e) => self.tell(format!("The scan failed: {e}")),
             }
         }
+    }
+
+    fn poll_lookups(&mut self) {
+        let Some(run) = &mut self.lookups else { return };
+        let done = run.finished();
+        let left = run.queued.len();
+        if done.is_empty() {
+            return;
+        }
+        self.shown_lookup = None;
+        use mb_core::db::LookupState as S;
+        let msg = match done.as_slice() {
+            [(a, state)] if left == 0 => match state {
+                S::Matched => format!("Looked up {}. Its changes are proposed, not made.", a.album),
+                S::Unsure => format!(
+                    "Looked up {}: more than one release might be it. Pick one under Releases.",
+                    a.album
+                ),
+                S::NotFound => format!("MusicBrainz has nothing like {}.", a.album),
+                S::Failed => format!("Couldn't look up {}. See the album for why.", a.album),
+            },
+            _ if left > 0 => format!("Looking up albums: {left} to go."),
+            _ => "Lookups finished. Changes are proposed, not made.".to_string(),
+        };
+        self.tell(msg);
     }
 
     fn add_folder(&mut self) {
@@ -478,7 +575,15 @@ impl LibraryApp {
         if !self.s.simple {
             buttons.push(("add", "Add folder", false));
             buttons.push(("exclude", "Exclude…", false));
-            buttons.push(("lookups", "Lookups: off", false));
+            buttons.push((
+                "lookups",
+                if self.s.lookups {
+                    "Lookups: on"
+                } else {
+                    "Lookups: off"
+                },
+                false,
+            ));
         }
         for (id, label, primary) in buttons {
             let w = hifi::button_width(ui, label).max(96.0);
@@ -494,9 +599,7 @@ impl LibraryApp {
                     "scan" => self.start_scan(ui.ctx()),
                     "add" => self.add_folder(),
                     "exclude" => self.add_exclude(),
-                    _ => self.tell(
-                        "Online lookups (MusicBrainz and cover art) come in stage 2. Nothing is sent online.",
-                    ),
+                    _ => self.toggle_lookups(ui.ctx()),
                 }
             }
             x = br.left() - 10.0;
@@ -1011,6 +1114,7 @@ impl LibraryApp {
         let mut open = self.settings_open;
         let mut look = self.s.finish;
         let mut system_bar = self.s.system_title_bar;
+        let mut lookups = self.s.lookups;
         let mut act = None;
         let db = self.db_path.display().to_string();
         hifi::drawer(ctx, t, "Settings", &mut open, |ui| {
@@ -1033,10 +1137,17 @@ impl LibraryApp {
             );
 
             hifi::drawer_heading(ui, t, "Lookups");
+            let r = hifi::drawer_row(ui, t, "Look albums up online", 32.0);
+            let r = Rect::from_min_size(r.min + Vec2::new(0.0, 4.0), Vec2::new(32.0, 18.0));
+            if hifi::switch(ui, r, Id::new("lookups-switch"), t, lookups).clicked() {
+                lookups = !lookups;
+            }
             ui.label(
-                egui::RichText::new(
-                    "Off. Looking albums up online (MusicBrainz and cover art) comes in stage 2, and only when you turn it on. Until then nothing is sent online.",
-                )
+                egui::RichText::new(if lookups {
+                    "On. Look up sends an album's artist, title and track count to MusicBrainz, one request a second, and fetches a front cover from the Cover Art Archive when the album's artwork is missing or small. What comes back is only proposed: nothing is written to your files."
+                } else {
+                    "Off: nothing is sent online. Turn it on to look albums up on MusicBrainz and fetch covers from the Cover Art Archive."
+                })
                 .font(hifi::ui_font(12.5))
                 .color(t.dim),
             );
@@ -1054,6 +1165,9 @@ impl LibraryApp {
             Some("s-add") => self.add_folder(),
             Some("s-exclude") => self.add_exclude(),
             _ => {}
+        }
+        if lookups != self.s.lookups {
+            self.toggle_lookups(ctx);
         }
         if system_bar != self.s.system_title_bar {
             self.s.system_title_bar = system_bar;

@@ -8,6 +8,8 @@ It's a desktop program written in Rust (egui for the panel). It isn't an HTML pa
 
 **The Library only reads your music.** It never changes, moves or deletes a file. Changing things comes in later stages, and always as a plan you review first.
 
+**It only goes online when you switch Lookups on**, and then only to MusicBrainz and the Cover Art Archive.
+
 ## What it does now (stage 1)
 
 - **Finds your drives**: internal, USB and network drives, on Windows and Linux. Each drive is recognised by its volume ID, not its drive letter, so E: becoming F: doesn't matter. A drive that's unplugged stays in the library, marked offline. When a drive is plugged in, Music Box notices within a few seconds.
@@ -20,6 +22,10 @@ It's a desktop program written in Rust (egui for the panel). It isn't an HTML pa
 - **Simple and Detailed.** Simple keeps search, Scan and Play; Detailed adds the drive details, Exclude, what each album is missing, and the views still to come.
 - **Resizable panes and columns**: drag the edges between the lists, and the dividers between column titles; double-click to fit or put back; right-click the titles to show or hide columns. Widths are remembered for each view.
 - **The TAW look**: Spool's warm panels by default, tinted by any of Spool's seven colour themes, or Porcelain; light, dark or following the computer. The Library draws its own title strip and window buttons; Settings can bring back the system's title bar.
+
+## Lookups (stage 2)
+
+Switch **Lookups** on (along the top in Detailed, or in Settings), then press **Look up** on an album, or **Look up all** in What's missing. The Library sends the album's artist, title and track count to MusicBrainz, one request a second, and compares the best-fitting release with your tags. The album's **Changes** list shows what would change; **Releases** shows what MusicBrainz offered, and you can pick another. Albums with missing or small artwork get the release's front cover from the Cover Art Archive, saved in the Library's own folder. Nothing is written to your files: applying changes comes in stage 3, with an undo log.
 
 ## Coming next
 
